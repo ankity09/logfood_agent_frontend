@@ -1,17 +1,20 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Target,
   Plus,
-  Filter,
   Search,
   ArrowUpRight,
   Clock,
   CheckCircle2,
-  AlertCircle,
+  Rocket,
   ChevronRight,
   Users,
   Building2,
+  X,
+  Calendar,
+  Server,
+  ChevronDown,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 
@@ -32,7 +35,9 @@ const itemVariants = {
   },
 }
 
-type Stage = 'discovery' | 'qualification' | 'poc' | 'negotiation' | 'closed_won' | 'closed_lost'
+type Stage = 'validating' | 'scoping' | 'evaluating' | 'confirming' | 'onboarding' | 'live'
+
+type DatabricksService = 'AI/BI' | 'DBSQL' | 'Unity Catalog' | 'AI/ML'
 
 interface UseCase {
   id: string
@@ -43,45 +48,370 @@ interface UseCase {
   createdAt: string
   description: string
   value: string
+  databricksServices: DatabricksService[]
+  nextSteps: string[]
+  stakeholders: string[]
 }
 
-const stageConfig: Record<Stage, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  discovery: { label: 'Discovery', color: 'text-neon-blue', bgColor: 'bg-neon-blue/10', borderColor: 'border-neon-blue/20' },
-  qualification: { label: 'Qualification', color: 'text-neon-purple', bgColor: 'bg-neon-purple/10', borderColor: 'border-neon-purple/20' },
-  poc: { label: 'POC', color: 'text-primary', bgColor: 'bg-primary/10', borderColor: 'border-primary/20' },
-  negotiation: { label: 'Negotiation', color: 'text-neon-pink', bgColor: 'bg-neon-pink/10', borderColor: 'border-neon-pink/20' },
-  closed_won: { label: 'Closed Won', color: 'text-green-400', bgColor: 'bg-green-400/10', borderColor: 'border-green-400/20' },
-  closed_lost: { label: 'Closed Lost', color: 'text-red-400', bgColor: 'bg-red-400/10', borderColor: 'border-red-400/20' },
+const stageConfig: Record<Stage, { label: string; color: string; bgColor: string; borderColor: string; order: number }> = {
+  validating: { label: 'Validating', color: 'text-neon-blue', bgColor: 'bg-neon-blue/10', borderColor: 'border-neon-blue/20', order: 1 },
+  scoping: { label: 'Scoping', color: 'text-neon-purple', bgColor: 'bg-neon-purple/10', borderColor: 'border-neon-purple/20', order: 2 },
+  evaluating: { label: 'Evaluating', color: 'text-yellow-400', bgColor: 'bg-yellow-400/10', borderColor: 'border-yellow-400/20', order: 3 },
+  confirming: { label: 'Confirming', color: 'text-neon-pink', bgColor: 'bg-neon-pink/10', borderColor: 'border-neon-pink/20', order: 4 },
+  onboarding: { label: 'Onboarding', color: 'text-primary', bgColor: 'bg-primary/10', borderColor: 'border-primary/20', order: 5 },
+  live: { label: 'Live', color: 'text-green-400', bgColor: 'bg-green-400/10', borderColor: 'border-green-400/20', order: 6 },
 }
+
+const allServices: DatabricksService[] = ['AI/BI', 'DBSQL', 'Unity Catalog', 'AI/ML']
+
+const serviceColors: Record<DatabricksService, string> = {
+  'AI/BI': 'bg-neon-blue/10 text-neon-blue border-neon-blue/20',
+  'DBSQL': 'bg-neon-purple/10 text-neon-purple border-neon-purple/20',
+  'Unity Catalog': 'bg-primary/10 text-primary border-primary/20',
+  'AI/ML': 'bg-neon-pink/10 text-neon-pink border-neon-pink/20',
+}
+
+const dateFilterOptions = [
+  { label: 'All Time', value: 'all' },
+  { label: 'Last 7 days', value: '7d' },
+  { label: 'Last 30 days', value: '30d' },
+  { label: 'Last 90 days', value: '90d' },
+] as const
+
+type DateFilter = typeof dateFilterOptions[number]['value']
 
 const useCases: UseCase[] = [
-  { id: '1', title: 'Real-time Data Lakehouse', account: 'Acme Corporation', stage: 'poc', owner: 'Sarah Chen', createdAt: '2 weeks ago', description: 'Implementing a real-time data lakehouse architecture for unified analytics.', value: '$250K' },
-  { id: '2', title: 'ML Pipeline Automation', account: 'Acme Corporation', stage: 'negotiation', owner: 'Sarah Chen', createdAt: '1 month ago', description: 'Automating ML model training and deployment pipelines.', value: '$180K' },
-  { id: '3', title: 'Customer 360 Analytics', account: 'TechStart Inc', stage: 'discovery', owner: 'Mike Johnson', createdAt: '3 days ago', description: 'Building a unified customer view across all touchpoints.', value: '$120K' },
-  { id: '4', title: 'Fraud Detection System', account: 'TechStart Inc', stage: 'qualification', owner: 'Mike Johnson', createdAt: '1 week ago', description: 'Real-time fraud detection using machine learning models.', value: '$300K' },
-  { id: '5', title: 'Data Governance Platform', account: 'DataFlow Systems', stage: 'negotiation', owner: 'Lisa Park', createdAt: '3 weeks ago', description: 'Enterprise-wide data governance and compliance platform.', value: '$200K' },
-  { id: '6', title: 'Predictive Maintenance', account: 'DataFlow Systems', stage: 'poc', owner: 'Lisa Park', createdAt: '2 weeks ago', description: 'IoT-driven predictive maintenance for manufacturing.', value: '$350K' },
-  { id: '7', title: 'Recommendation Engine', account: 'CloudNine Analytics', stage: 'closed_won', owner: 'James Lee', createdAt: '2 months ago', description: 'Personalized recommendation engine for e-commerce.', value: '$150K' },
-  { id: '8', title: 'Supply Chain Optimization', account: 'CloudNine Analytics', stage: 'discovery', owner: 'James Lee', createdAt: '1 week ago', description: 'AI-driven supply chain forecasting and optimization.', value: '$280K' },
-  { id: '9', title: 'NLP Document Processing', account: 'MetricPulse AI', stage: 'qualification', owner: 'Anna Kim', createdAt: '5 days ago', description: 'Automated document processing using NLP models.', value: '$175K' },
-  { id: '10', title: 'Data Migration to Cloud', account: 'MetricPulse AI', stage: 'closed_lost', owner: 'Anna Kim', createdAt: '1 month ago', description: 'Legacy on-prem to cloud data migration project.', value: '$90K' },
+  {
+    id: '1', title: 'Real-time Data Lakehouse', account: 'Acme Corporation', stage: 'evaluating', owner: 'Sarah Chen',
+    createdAt: '2025-01-13', description: 'Implementing a real-time data lakehouse architecture for unified analytics across all business units.',
+    value: '$250K', databricksServices: ['DBSQL', 'Unity Catalog'],
+    nextSteps: ['Schedule technical deep-dive', 'Prepare POC environment', 'Share architecture document'],
+    stakeholders: ['VP Engineering', 'Data Team Lead', 'CTO'],
+  },
+  {
+    id: '2', title: 'ML Pipeline Automation', account: 'Acme Corporation', stage: 'confirming', owner: 'Sarah Chen',
+    createdAt: '2024-12-27', description: 'Automating ML model training and deployment pipelines with MLflow and Databricks Jobs.',
+    value: '$180K', databricksServices: ['AI/ML', 'Unity Catalog'],
+    nextSteps: ['Send updated pricing proposal', 'Align on timeline with engineering'],
+    stakeholders: ['ML Engineering Lead', 'VP Data Science'],
+  },
+  {
+    id: '3', title: 'Customer 360 Analytics', account: 'TechStart Inc', stage: 'validating', owner: 'Mike Johnson',
+    createdAt: '2025-01-24', description: 'Building a unified customer view across all touchpoints using Delta Lake and DBSQL dashboards.',
+    value: '$120K', databricksServices: ['AI/BI', 'DBSQL'],
+    nextSteps: ['Map data sources', 'Schedule data audit', 'Identify stakeholders'],
+    stakeholders: ['CTO', 'Data Team Lead'],
+  },
+  {
+    id: '4', title: 'Fraud Detection System', account: 'TechStart Inc', stage: 'scoping', owner: 'Mike Johnson',
+    createdAt: '2025-01-20', description: 'Real-time fraud detection using machine learning models on Databricks with feature store.',
+    value: '$300K', databricksServices: ['AI/ML', 'DBSQL'],
+    nextSteps: ['Define model requirements', 'Assess data readiness', 'Plan feature engineering'],
+    stakeholders: ['Head of Risk', 'ML Engineering Lead'],
+  },
+  {
+    id: '5', title: 'Data Governance Platform', account: 'DataFlow Systems', stage: 'confirming', owner: 'Lisa Park',
+    createdAt: '2025-01-06', description: 'Enterprise-wide data governance and compliance platform using Unity Catalog.',
+    value: '$200K', databricksServices: ['Unity Catalog'],
+    nextSteps: ['Finalize contract terms', 'Schedule kickoff meeting'],
+    stakeholders: ['Chief Data Officer', 'Compliance Lead'],
+  },
+  {
+    id: '6', title: 'Predictive Maintenance', account: 'DataFlow Systems', stage: 'evaluating', owner: 'Lisa Park',
+    createdAt: '2025-01-13', description: 'IoT-driven predictive maintenance for manufacturing using streaming and ML.',
+    value: '$350K', databricksServices: ['AI/ML', 'DBSQL', 'Unity Catalog'],
+    nextSteps: ['Set up streaming POC', 'Connect IoT data sources', 'Train baseline model'],
+    stakeholders: ['VP Manufacturing', 'IoT Platform Lead'],
+  },
+  {
+    id: '7', title: 'Recommendation Engine', account: 'CloudNine Analytics', stage: 'live', owner: 'James Lee',
+    createdAt: '2024-11-27', description: 'Personalized recommendation engine for e-commerce powered by Databricks ML.',
+    value: '$150K', databricksServices: ['AI/ML', 'AI/BI'],
+    nextSteps: ['Monitor model performance', 'Plan quarterly review'],
+    stakeholders: ['VP Product', 'Data Science Lead'],
+  },
+  {
+    id: '8', title: 'Supply Chain Optimization', account: 'CloudNine Analytics', stage: 'validating', owner: 'James Lee',
+    createdAt: '2025-01-20', description: 'AI-driven supply chain forecasting and optimization with DBSQL dashboards.',
+    value: '$280K', databricksServices: ['AI/BI', 'DBSQL', 'AI/ML'],
+    nextSteps: ['Discovery call', 'Assess current data infrastructure', 'Identify quick wins'],
+    stakeholders: ['VP Operations', 'Supply Chain Director'],
+  },
+  {
+    id: '9', title: 'NLP Document Processing', account: 'MetricPulse AI', stage: 'scoping', owner: 'Anna Kim',
+    createdAt: '2025-01-22', description: 'Automated document processing using NLP models with foundation model APIs.',
+    value: '$175K', databricksServices: ['AI/ML'],
+    nextSteps: ['Document corpus analysis', 'Model selection', 'Define accuracy targets'],
+    stakeholders: ['Head of AI', 'Product Manager'],
+  },
+  {
+    id: '10', title: 'Executive BI Dashboards', account: 'MetricPulse AI', stage: 'onboarding', owner: 'Anna Kim',
+    createdAt: '2024-12-27', description: 'AI/BI-powered executive dashboards with natural language querying.',
+    value: '$90K', databricksServices: ['AI/BI', 'DBSQL'],
+    nextSteps: ['Set up workspace access', 'Configure data connections', 'Train end users'],
+    stakeholders: ['CEO', 'CFO', 'Head of Analytics'],
+  },
 ]
 
 function StageBadge({ stage }: { stage: Stage }) {
   const config = stageConfig[stage]
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${config.bgColor} ${config.color} ${config.borderColor}`}>
-      {stage === 'closed_won' ? <CheckCircle2 className="w-3 h-3" /> :
-       stage === 'closed_lost' ? <AlertCircle className="w-3 h-3" /> :
-       stage === 'poc' ? <ArrowUpRight className="w-3 h-3" /> :
+      {stage === 'live' ? <CheckCircle2 className="w-3 h-3" /> :
+       stage === 'onboarding' ? <Rocket className="w-3 h-3" /> :
+       stage === 'evaluating' ? <ArrowUpRight className="w-3 h-3" /> :
        <Clock className="w-3 h-3" />}
       {config.label}
     </span>
   )
 }
 
-function StageColumnView({ filteredUseCases }: { filteredUseCases: UseCase[] }) {
-  const stages: Stage[] = ['discovery', 'qualification', 'poc', 'negotiation', 'closed_won', 'closed_lost']
+function ServiceBadge({ service }: { service: DatabricksService }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${serviceColors[service]}`}>
+      {service}
+    </span>
+  )
+}
+
+// --- Detail Modal ---
+function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: () => void }) {
+  const stgConfig = stageConfig[useCase.stage]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
+        className="relative w-full max-w-lg bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between p-6 border-b border-white/5">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
+              <Target className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">{useCase.title}</h2>
+              <div className="flex items-center gap-2 mt-2">
+                <StageBadge stage={useCase.stage} />
+                <span className="text-xs text-gray-500">{useCase.value}</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto no-scrollbar">
+          {/* Description */}
+          <div>
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Description</h4>
+            <p className="text-sm text-gray-300 leading-relaxed">{useCase.description}</p>
+          </div>
+
+          {/* Account & Owner */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Account</h4>
+              <p className="text-sm text-white flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                {useCase.account}
+              </p>
+            </div>
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Owner</h4>
+              <p className="text-sm text-white flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-gray-400" />
+                {useCase.owner}
+              </p>
+            </div>
+          </div>
+
+          {/* Databricks Services */}
+          <div>
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Databricks Services</h4>
+            <div className="flex flex-wrap gap-2">
+              {useCase.databricksServices.map((svc) => (
+                <ServiceBadge key={svc} service={svc} />
+              ))}
+            </div>
+          </div>
+
+          {/* Stage Info */}
+          <div>
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stage Progress</h4>
+            <div className="flex gap-1">
+              {Object.entries(stageConfig)
+                .sort(([, a], [, b]) => a.order - b.order)
+                .map(([key, cfg]) => (
+                  <div
+                    key={key}
+                    className={`flex-1 h-2 rounded-full transition-colors ${
+                      cfg.order <= stgConfig.order ? stgConfig.bgColor.replace('/10', '/40') : 'bg-dark-50'
+                    }`}
+                    title={cfg.label}
+                  />
+                ))}
+            </div>
+            <div className="flex justify-between mt-1.5">
+              <span className="text-xs text-gray-500">Validating</span>
+              <span className="text-xs text-gray-500">Live</span>
+            </div>
+          </div>
+
+          {/* Stakeholders */}
+          <div>
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stakeholders</h4>
+            <div className="flex flex-wrap gap-2">
+              {useCase.stakeholders.map((s, i) => (
+                <span key={i} className="text-xs bg-dark-50 text-gray-300 px-2.5 py-1 rounded-lg border border-white/5">
+                  {s}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Next Steps */}
+          <div>
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Next Steps</h4>
+            <ul className="space-y-1.5">
+              {useCase.nextSteps.map((step, i) => (
+                <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
+                  <span className="text-primary mt-0.5 shrink-0">-</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Meta */}
+          <div className="flex items-center gap-4 pt-3 border-t border-white/5 text-xs text-gray-500">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              Created: {new Date(useCase.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// --- Filter Panel ---
+function FilterPanel({
+  stageFilter, setStageFilter,
+  serviceFilter, setServiceFilter,
+  dateFilter, setDateFilter,
+  onClear,
+}: {
+  stageFilter: Stage | 'all'
+  setStageFilter: (v: Stage | 'all') => void
+  serviceFilter: DatabricksService | 'all'
+  setServiceFilter: (v: DatabricksService | 'all') => void
+  dateFilter: DateFilter
+  setDateFilter: (v: DateFilter) => void
+  onClear: () => void
+}) {
+  const hasFilters = stageFilter !== 'all' || serviceFilter !== 'all' || dateFilter !== 'all'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      className="overflow-hidden"
+    >
+      <div className="glass-card p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium text-white">Filters</h4>
+          {hasFilters && (
+            <button onClick={onClear} className="text-xs text-gray-400 hover:text-white transition-colors">
+              Clear all
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Stage Filter */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Stage</label>
+            <div className="relative">
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value as Stage | 'all')}
+                className="input text-sm appearance-none pr-8 cursor-pointer"
+              >
+                <option value="all">All Stages</option>
+                {Object.entries(stageConfig).map(([key, cfg]) => (
+                  <option key={key} value={key}>{cfg.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Service Filter */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Databricks Service</label>
+            <div className="relative">
+              <select
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value as DatabricksService | 'all')}
+                className="input text-sm appearance-none pr-8 cursor-pointer"
+              >
+                <option value="all">All Services</option>
+                {allServices.map((svc) => (
+                  <option key={svc} value={svc}>{svc}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Date Filter */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Date Created</label>
+            <div className="relative">
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+                className="input text-sm appearance-none pr-8 cursor-pointer"
+              >
+                {dateFilterOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+// --- Board View ---
+function StageColumnView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[]; onSelect: (uc: UseCase) => void }) {
+  const stages: Stage[] = ['validating', 'scoping', 'evaluating', 'confirming', 'onboarding', 'live']
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -99,6 +429,7 @@ function StageColumnView({ filteredUseCases }: { filteredUseCases: UseCase[] }) 
                 <motion.div
                   key={uc.id}
                   whileHover={{ scale: 1.02 }}
+                  onClick={() => onSelect(uc)}
                   className="p-3 glass-card rounded-xl cursor-pointer hover:border-white/10 transition-all"
                 >
                   <h4 className="text-sm font-medium text-white mb-1 truncate">{uc.title}</h4>
@@ -106,9 +437,18 @@ function StageColumnView({ filteredUseCases }: { filteredUseCases: UseCase[] }) 
                     <Building2 className="w-3 h-3" />
                     {uc.account}
                   </p>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {uc.databricksServices.map((svc) => (
+                      <span key={svc} className={`text-[10px] px-1.5 py-0.5 rounded border ${serviceColors[svc]}`}>
+                        {svc}
+                      </span>
+                    ))}
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500">{uc.value}</span>
-                    <span className="text-xs text-gray-500">{uc.createdAt}</span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(uc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
                   </div>
                 </motion.div>
               ))}
@@ -120,7 +460,8 @@ function StageColumnView({ filteredUseCases }: { filteredUseCases: UseCase[] }) 
   )
 }
 
-function ListView({ filteredUseCases }: { filteredUseCases: UseCase[] }) {
+// --- List View ---
+function ListView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[]; onSelect: (uc: UseCase) => void }) {
   return (
     <div className="space-y-3">
       {filteredUseCases.map((uc, i) => (
@@ -129,6 +470,7 @@ function ListView({ filteredUseCases }: { filteredUseCases: UseCase[] }) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.05 }}
+          onClick={() => onSelect(uc)}
         >
           <Card className="!p-4">
             <div className="flex items-center gap-4">
@@ -150,8 +492,11 @@ function ListView({ filteredUseCases }: { filteredUseCases: UseCase[] }) {
                     <Users className="w-3 h-3" />
                     {uc.owner}
                   </span>
+                  <span className="flex items-center gap-1">
+                    <Server className="w-3 h-3" />
+                    {uc.databricksServices.join(', ')}
+                  </span>
                   <span>{uc.value}</span>
-                  <span>{uc.createdAt}</span>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
@@ -163,20 +508,38 @@ function ListView({ filteredUseCases }: { filteredUseCases: UseCase[] }) {
   )
 }
 
+// --- Main Page ---
 export function UseCasesPage() {
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
   const [searchQuery, setSearchQuery] = useState('')
   const [stageFilter, setStageFilter] = useState<Stage | 'all'>('all')
+  const [serviceFilter, setServiceFilter] = useState<DatabricksService | 'all'>('all')
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+  const [showFilters, setShowFilters] = useState(false)
+  const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null)
 
   const filteredUseCases = useCases.filter((uc) => {
-    const matchesSearch = uc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = searchQuery === '' ||
+      uc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       uc.account.toLowerCase().includes(searchQuery.toLowerCase()) ||
       uc.description.toLowerCase().includes(searchQuery.toLowerCase())
+
     const matchesStage = stageFilter === 'all' || uc.stage === stageFilter
-    return matchesSearch && matchesStage
+
+    const matchesService = serviceFilter === 'all' || uc.databricksServices.includes(serviceFilter)
+
+    let matchesDate = true
+    if (dateFilter !== 'all') {
+      const created = new Date(uc.createdAt)
+      const now = new Date()
+      const daysAgo = dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : 90
+      const cutoff = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+      matchesDate = created >= cutoff
+    }
+
+    return matchesSearch && matchesStage && matchesService && matchesDate
   })
 
-  // Stage summary counts
   const stageCounts = Object.entries(stageConfig).map(([key, config]) => ({
     stage: key as Stage,
     label: config.label,
@@ -184,6 +547,14 @@ export function UseCasesPage() {
     color: config.color,
     bgColor: config.bgColor,
   }))
+
+  const activeFilterCount = [stageFilter !== 'all', serviceFilter !== 'all', dateFilter !== 'all'].filter(Boolean).length
+
+  const clearFilters = () => {
+    setStageFilter('all')
+    setServiceFilter('all')
+    setDateFilter('all')
+  }
 
   return (
     <motion.div
@@ -235,9 +606,17 @@ export function UseCasesPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-ghost flex items-center gap-2 text-sm">
-            <Filter className="w-4 h-4" />
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`btn-ghost flex items-center gap-2 text-sm ${showFilters ? 'text-primary' : ''}`}
+          >
+            <Server className="w-4 h-4" />
             Filters
+            {activeFilterCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-primary text-dark text-xs flex items-center justify-center font-semibold">
+                {activeFilterCount}
+              </span>
+            )}
           </button>
           <div className="flex bg-dark-100/50 rounded-lg border border-white/5 p-0.5">
             <button
@@ -260,14 +639,46 @@ export function UseCasesPage() {
         </div>
       </motion.div>
 
+      {/* Filter Panel */}
+      <AnimatePresence>
+        {showFilters && (
+          <FilterPanel
+            stageFilter={stageFilter}
+            setStageFilter={setStageFilter}
+            serviceFilter={serviceFilter}
+            setServiceFilter={setServiceFilter}
+            dateFilter={dateFilter}
+            setDateFilter={setDateFilter}
+            onClear={clearFilters}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Content */}
       <motion.div variants={itemVariants}>
-        {viewMode === 'board' ? (
-          <StageColumnView filteredUseCases={filteredUseCases} />
+        {filteredUseCases.length === 0 ? (
+          <div className="text-center py-16">
+            <Target className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 text-lg">No use cases match your filters</p>
+            <p className="text-gray-500 text-sm mt-1">Try adjusting your search or filter criteria</p>
+            <button onClick={clearFilters} className="btn-ghost mt-4 text-sm">Clear all filters</button>
+          </div>
+        ) : viewMode === 'board' ? (
+          <StageColumnView filteredUseCases={filteredUseCases} onSelect={setSelectedUseCase} />
         ) : (
-          <ListView filteredUseCases={filteredUseCases} />
+          <ListView filteredUseCases={filteredUseCases} onSelect={setSelectedUseCase} />
         )}
       </motion.div>
+
+      {/* Detail Modal */}
+      <AnimatePresence>
+        {selectedUseCase && (
+          <UseCaseDetailModal
+            useCase={selectedUseCase}
+            onClose={() => setSelectedUseCase(null)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
