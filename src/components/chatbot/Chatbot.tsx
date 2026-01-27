@@ -11,7 +11,7 @@ import {
   User,
   AlertCircle,
 } from 'lucide-react'
-import { appConfig } from '../../config'
+import { databricksConfig } from '../../config'
 
 interface Message {
   id: string
@@ -31,7 +31,7 @@ export function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: appConfig.ui.chatbot.welcomeMessage,
+      content: databricksConfig.ui.chatbot.welcomeMessage,
       role: 'assistant',
       timestamp: new Date(),
     },
@@ -83,7 +83,7 @@ export function Chatbot() {
       chatHistory.push({ role: 'user', content: input })
 
       const response = await fetch(
-        `${appConfig.api.baseUrl}${appConfig.api.chatEndpoint}`,
+        `${databricksConfig.api.baseUrl}${databricksConfig.api.chatEndpoint}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -132,7 +132,7 @@ export function Chatbot() {
     setMessages([
       {
         id: Date.now().toString(),
-        content: appConfig.ui.chatbot.welcomeMessage,
+        content: databricksConfig.ui.chatbot.welcomeMessage,
         role: 'assistant',
         timestamp: new Date(),
       },
@@ -184,10 +184,10 @@ export function Chatbot() {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-white">
-                    {appConfig.ui.chatbot.title}
+                    {databricksConfig.ui.chatbot.title}
                   </h3>
                   <p className="text-xs text-gray-400">
-                    {appConfig.ui.chatbot.subtitle}
+                    {databricksConfig.ui.chatbot.subtitle}
                   </p>
                 </div>
               </div>
@@ -302,7 +302,7 @@ export function Chatbot() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={appConfig.ui.chatbot.placeholder}
+                  placeholder={databricksConfig.ui.chatbot.placeholder}
                   disabled={isTyping}
                   className="flex-1 input text-sm disabled:opacity-50"
                 />
@@ -317,7 +317,7 @@ export function Chatbot() {
                 </motion.button>
               </div>
               <p className="text-xs text-gray-500 mt-2 text-center">
-                {appConfig.ui.chatbot.subtitle}
+                {databricksConfig.ui.chatbot.subtitle}
               </p>
             </div>
           </motion.div>

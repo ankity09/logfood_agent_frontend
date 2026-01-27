@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server/index.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
     "framer-motion": "^11.11.0",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",

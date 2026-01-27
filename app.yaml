@@ -1,0 +1,8 @@
+command:
+  - node
+  - server/index.js
+env:
+  - name: DATABRICKS_HOST
+    value: https://fevm-ay-demo-workspace.cloud.databricks.com
+  - name: DATABRICKS_CHAT_ENDPOINT
+    value: databricks-claude-haiku-4-5

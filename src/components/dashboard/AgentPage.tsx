@@ -12,7 +12,7 @@ import {
   FileText,
   X,
 } from 'lucide-react'
-import { appConfig } from '../../config'
+import { databricksConfig } from '../../config'
 
 interface Message {
   id: string
@@ -55,7 +55,7 @@ export function AgentPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: appConfig.ui.chatbot.welcomeMessage,
+      content: databricksConfig.ui.chatbot.welcomeMessage,
       role: 'assistant',
       timestamp: new Date(),
     },
@@ -111,7 +111,7 @@ export function AgentPage() {
       chatHistory.push({ role: 'user', content: input })
 
       const response = await fetch(
-        `${appConfig.api.baseUrl}${appConfig.api.chatEndpoint}`,
+        `${databricksConfig.api.baseUrl}${databricksConfig.api.chatEndpoint}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -187,7 +187,7 @@ export function AgentPage() {
     setMessages([
       {
         id: Date.now().toString(),
-        content: appConfig.ui.chatbot.welcomeMessage,
+        content: databricksConfig.ui.chatbot.welcomeMessage,
         role: 'assistant',
         timestamp: new Date(),
       },
@@ -376,7 +376,7 @@ export function AgentPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={appConfig.ui.chatbot.placeholder}
+              placeholder={databricksConfig.ui.chatbot.placeholder}
               disabled={isTyping}
               rows={1}
               className="flex-1 input text-sm disabled:opacity-50 resize-none min-h-[48px] max-h-[120px]"
@@ -400,7 +400,7 @@ export function AgentPage() {
             </motion.button>
           </div>
           <p className="text-xs text-gray-500 mt-2 text-center">
-            {appConfig.ui.chatbot.subtitle}
+            {databricksConfig.ui.chatbot.subtitle}
           </p>
         </div>
       </motion.div>
