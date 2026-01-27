@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Target,
@@ -15,8 +15,10 @@ import {
   Calendar,
   Server,
   ChevronDown,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
+import { databricksConfig } from '../../config'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -80,78 +82,24 @@ const dateFilterOptions = [
 
 type DateFilter = typeof dateFilterOptions[number]['value']
 
-const useCases: UseCase[] = [
-  {
-    id: '1', title: 'Real-time Data Lakehouse', account: 'Acme Corporation', stage: 'evaluating', owner: 'Sarah Chen',
-    createdAt: '2025-01-13', description: 'Implementing a real-time data lakehouse architecture for unified analytics across all business units.',
-    value: '$250K', databricksServices: ['DBSQL', 'Unity Catalog'],
-    nextSteps: ['Schedule technical deep-dive', 'Prepare POC environment', 'Share architecture document'],
-    stakeholders: ['VP Engineering', 'Data Team Lead', 'CTO'],
-  },
-  {
-    id: '2', title: 'ML Pipeline Automation', account: 'Acme Corporation', stage: 'confirming', owner: 'Sarah Chen',
-    createdAt: '2024-12-27', description: 'Automating ML model training and deployment pipelines with MLflow and Databricks Jobs.',
-    value: '$180K', databricksServices: ['AI/ML', 'Unity Catalog'],
-    nextSteps: ['Send updated pricing proposal', 'Align on timeline with engineering'],
-    stakeholders: ['ML Engineering Lead', 'VP Data Science'],
-  },
-  {
-    id: '3', title: 'Customer 360 Analytics', account: 'TechStart Inc', stage: 'validating', owner: 'Mike Johnson',
-    createdAt: '2025-01-24', description: 'Building a unified customer view across all touchpoints using Delta Lake and DBSQL dashboards.',
-    value: '$120K', databricksServices: ['AI/BI', 'DBSQL'],
-    nextSteps: ['Map data sources', 'Schedule data audit', 'Identify stakeholders'],
-    stakeholders: ['CTO', 'Data Team Lead'],
-  },
-  {
-    id: '4', title: 'Fraud Detection System', account: 'TechStart Inc', stage: 'scoping', owner: 'Mike Johnson',
-    createdAt: '2025-01-20', description: 'Real-time fraud detection using machine learning models on Databricks with feature store.',
-    value: '$300K', databricksServices: ['AI/ML', 'DBSQL'],
-    nextSteps: ['Define model requirements', 'Assess data readiness', 'Plan feature engineering'],
-    stakeholders: ['Head of Risk', 'ML Engineering Lead'],
-  },
-  {
-    id: '5', title: 'Data Governance Platform', account: 'DataFlow Systems', stage: 'confirming', owner: 'Lisa Park',
-    createdAt: '2025-01-06', description: 'Enterprise-wide data governance and compliance platform using Unity Catalog.',
-    value: '$200K', databricksServices: ['Unity Catalog'],
-    nextSteps: ['Finalize contract terms', 'Schedule kickoff meeting'],
-    stakeholders: ['Chief Data Officer', 'Compliance Lead'],
-  },
-  {
-    id: '6', title: 'Predictive Maintenance', account: 'DataFlow Systems', stage: 'evaluating', owner: 'Lisa Park',
-    createdAt: '2025-01-13', description: 'IoT-driven predictive maintenance for manufacturing using streaming and ML.',
-    value: '$350K', databricksServices: ['AI/ML', 'DBSQL', 'Unity Catalog'],
-    nextSteps: ['Set up streaming POC', 'Connect IoT data sources', 'Train baseline model'],
-    stakeholders: ['VP Manufacturing', 'IoT Platform Lead'],
-  },
-  {
-    id: '7', title: 'Recommendation Engine', account: 'CloudNine Analytics', stage: 'live', owner: 'James Lee',
-    createdAt: '2024-11-27', description: 'Personalized recommendation engine for e-commerce powered by Databricks ML.',
-    value: '$150K', databricksServices: ['AI/ML', 'AI/BI'],
-    nextSteps: ['Monitor model performance', 'Plan quarterly review'],
-    stakeholders: ['VP Product', 'Data Science Lead'],
-  },
-  {
-    id: '8', title: 'Supply Chain Optimization', account: 'CloudNine Analytics', stage: 'validating', owner: 'James Lee',
-    createdAt: '2025-01-20', description: 'AI-driven supply chain forecasting and optimization with DBSQL dashboards.',
-    value: '$280K', databricksServices: ['AI/BI', 'DBSQL', 'AI/ML'],
-    nextSteps: ['Discovery call', 'Assess current data infrastructure', 'Identify quick wins'],
-    stakeholders: ['VP Operations', 'Supply Chain Director'],
-  },
-  {
-    id: '9', title: 'NLP Document Processing', account: 'MetricPulse AI', stage: 'scoping', owner: 'Anna Kim',
-    createdAt: '2025-01-22', description: 'Automated document processing using NLP models with foundation model APIs.',
-    value: '$175K', databricksServices: ['AI/ML'],
-    nextSteps: ['Document corpus analysis', 'Model selection', 'Define accuracy targets'],
-    stakeholders: ['Head of AI', 'Product Manager'],
-  },
-  {
-    id: '10', title: 'Executive BI Dashboards', account: 'MetricPulse AI', stage: 'onboarding', owner: 'Anna Kim',
-    createdAt: '2024-12-27', description: 'AI/BI-powered executive dashboards with natural language querying.',
-    value: '$90K', databricksServices: ['AI/BI', 'DBSQL'],
-    nextSteps: ['Set up workspace access', 'Configure data connections', 'Train end users'],
-    stakeholders: ['CEO', 'CFO', 'Head of Analytics'],
-  },
-]
+async function fetchUseCases(params?: {
+  stage?: string
+  service?: string
+  date?: string
+  search?: string
+}): Promise<UseCase[]> {
+  const query = new URLSearchParams()
+  if (params?.stage && params.stage !== 'all') query.set('stage', params.stage)
+  if (params?.service && params.service !== 'all') query.set('service', params.service)
+  if (params?.date && params.date !== 'all') query.set('date', params.date)
+  if (params?.search) query.set('search', params.search)
+
+  const qs = query.toString()
+  const url = `${databricksConfig.api.baseUrl}${databricksConfig.api.useCasesEndpoint}${qs ? `?${qs}` : ''}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Failed to fetch use cases: ${res.status}`)
+  return res.json()
+}
 
 function StageBadge({ stage }: { stage: Stage }) {
   const config = stageConfig[stage]
@@ -517,27 +465,43 @@ export function UseCasesPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('all')
   const [showFilters, setShowFilters] = useState(false)
   const [selectedUseCase, setSelectedUseCase] = useState<UseCase | null>(null)
+  const [useCases, setUseCases] = useState<UseCase[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredUseCases = useCases.filter((uc) => {
-    const matchesSearch = searchQuery === '' ||
-      uc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      uc.account.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      uc.description.toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesStage = stageFilter === 'all' || uc.stage === stageFilter
-
-    const matchesService = serviceFilter === 'all' || uc.databricksServices.includes(serviceFilter)
-
-    let matchesDate = true
-    if (dateFilter !== 'all') {
-      const created = new Date(uc.createdAt)
-      const now = new Date()
-      const daysAgo = dateFilter === '7d' ? 7 : dateFilter === '30d' ? 30 : 90
-      const cutoff = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
-      matchesDate = created >= cutoff
+  const loadUseCases = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await fetchUseCases({
+        stage: stageFilter,
+        service: serviceFilter,
+        date: dateFilter,
+        search: searchQuery || undefined,
+      })
+      setUseCases(data)
+    } catch (err) {
+      console.error('Failed to load use cases:', err)
+      setError('Failed to load use cases. Please try again.')
+    } finally {
+      setLoading(false)
     }
+  }, [stageFilter, serviceFilter, dateFilter, searchQuery])
 
-    return matchesSearch && matchesStage && matchesService && matchesDate
+  useEffect(() => {
+    loadUseCases()
+  }, [loadUseCases])
+
+  // Client-side search still applies for instant filtering
+  // (server also filters, but we keep client filtering for responsiveness)
+  const filteredUseCases = useCases.filter((uc) => {
+    if (!searchQuery) return true
+    const q = searchQuery.toLowerCase()
+    return (
+      uc.title.toLowerCase().includes(q) ||
+      uc.account.toLowerCase().includes(q) ||
+      uc.description.toLowerCase().includes(q)
+    )
   })
 
   const stageCounts = Object.entries(stageConfig).map(([key, config]) => ({
@@ -656,7 +620,18 @@ export function UseCasesPage() {
 
       {/* Content */}
       <motion.div variants={itemVariants}>
-        {filteredUseCases.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <Loader2 className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
+            <p className="text-gray-400">Loading use cases...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <Target className="w-12 h-12 text-red-500/50 mx-auto mb-4" />
+            <p className="text-red-400 text-lg">{error}</p>
+            <button onClick={loadUseCases} className="btn-ghost mt-4 text-sm">Retry</button>
+          </div>
+        ) : filteredUseCases.length === 0 ? (
           <div className="text-center py-16">
             <Target className="w-12 h-12 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400 text-lg">No use cases match your filters</p>

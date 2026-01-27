@@ -13,6 +13,7 @@
 import express from 'express'
 import cors from 'cors'
 import { config, validateConfig, logConfig } from './config.js'
+import lakebaseRoutes from './lakebase.js'
 
 const app = express()
 const PORT = config.server.port
@@ -294,6 +295,15 @@ app.get('/api/user', (req, res) => {
   })
 })
 
+// Attach user token to request for Lakebase routes
+app.use('/api', (req, res, next) => {
+  req.userToken = getUserToken(req)
+  next()
+})
+
+// Mount Lakebase data routes
+app.use('/api', lakebaseRoutes)
+
 // Catch-all route to serve the frontend for client-side routing
 app.get('*', (req, res) => {
   res.sendFile('index.html', { root: 'dist' })
@@ -309,4 +319,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  POST /api/auth/dashboard-token - Get dashboard token`)
   console.log(`  POST /api/chat                 - Chat with AI`)
   console.log(`  POST /api/chat/stream          - Streaming chat`)
+  console.log(`  GET  /api/use-cases            - List use cases`)
+  console.log(`  GET  /api/use-cases/:id        - Get use case`)
+  console.log(`  POST /api/use-cases            - Create use case`)
+  console.log(`  PATCH /api/use-cases/:id       - Update use case`)
+  console.log(`  GET  /api/accounts             - List accounts`)
+  console.log(`  GET  /api/meeting-notes        - List meeting notes`)
+  console.log(`  POST /api/meeting-notes        - Create meeting note`)
+  console.log(`  GET  /api/activities            - Recent activities`)
+  console.log(`  GET  /api/stats                - Dashboard stats`)
 })

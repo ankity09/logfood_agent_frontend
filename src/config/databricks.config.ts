@@ -52,6 +52,14 @@ export const databricksConfig = {
 
     // Chat endpoint for AI assistant
     chatEndpoint: '/chat',
+
+    // Lakebase data endpoints
+    useCasesEndpoint: '/use-cases',
+    accountsEndpoint: '/accounts',
+    meetingNotesEndpoint: '/meeting-notes',
+    extractedUseCasesEndpoint: '/extracted-use-cases',
+    activitiesEndpoint: '/activities',
+    statsEndpoint: '/stats',
   },
 
   // UI Configuration

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload,
@@ -14,8 +14,10 @@ import {
   Users,
   ExternalLink,
   ClipboardCopy,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
+import { databricksConfig } from '../../config'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -53,56 +55,6 @@ interface MeetingNote {
   summary: string
   isExpanded: boolean
 }
-
-// Mock processed meeting notes
-const mockNotes: MeetingNote[] = [
-  {
-    id: '1',
-    filename: 'acme-quarterly-review-q4.txt',
-    uploadDate: 'Jan 25, 2026',
-    account: 'Acme Corporation',
-    attendees: ['Sarah Chen', 'John Smith (Acme)', 'VP Engineering (Acme)'],
-    summary: 'Quarterly review focused on expanding data lakehouse deployment and introducing ML pipeline automation. Client expressed strong interest in real-time analytics capabilities.',
-    extractedUseCases: [
-      {
-        title: 'Real-time Analytics Dashboard',
-        account: 'Acme Corporation',
-        stage: 'POC',
-        description: 'Client wants real-time analytics dashboard integrated with their existing data lakehouse for executive visibility.',
-        nextSteps: ['Schedule technical deep-dive', 'Prepare POC environment', 'Share architecture document'],
-        copied: false,
-      },
-      {
-        title: 'ML Pipeline v2 Upgrade',
-        account: 'Acme Corporation',
-        stage: 'Negotiation',
-        description: 'Upgrade existing ML pipeline to support automated retraining and A/B model testing.',
-        nextSteps: ['Send updated pricing proposal', 'Align on timeline with engineering'],
-        copied: false,
-      },
-    ],
-    isExpanded: true,
-  },
-  {
-    id: '2',
-    filename: 'techstart-kickoff-meeting.txt',
-    uploadDate: 'Jan 22, 2026',
-    account: 'TechStart Inc',
-    attendees: ['Mike Johnson', 'CTO (TechStart)', 'Data Team Lead (TechStart)'],
-    summary: 'Initial discovery call with TechStart. They are evaluating solutions for customer analytics and fraud detection. Budget approved for Q1 initiatives.',
-    extractedUseCases: [
-      {
-        title: 'Customer 360 Platform',
-        account: 'TechStart Inc',
-        stage: 'Discovery',
-        description: 'Unified customer view combining web, mobile, and in-store data for personalized marketing.',
-        nextSteps: ['Map data sources', 'Schedule data audit', 'Identify stakeholders'],
-        copied: false,
-      },
-    ],
-    isExpanded: false,
-  },
-]
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
@@ -169,10 +121,50 @@ function ExtractedUseCaseCard({ useCase }: { useCase: ExtractedUseCase }) {
 }
 
 export function MeetingNotesPage() {
-  const [notes, setNotes] = useState<MeetingNote[]>(mockNotes)
+  const [notes, setNotes] = useState<MeetingNote[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadNotes() {
+      try {
+        const res = await fetch(
+          `${databricksConfig.api.baseUrl}${databricksConfig.api.meetingNotesEndpoint}`
+        )
+        if (res.ok) {
+          const data = await res.json()
+          // Transform API response to MeetingNote shape
+          const transformed: MeetingNote[] = data.map((n: Record<string, unknown>, i: number) => ({
+            id: n.id as string,
+            filename: n.filename as string,
+            uploadDate: n.uploadDate as string,
+            account: n.account as string,
+            attendees: (n.attendees as string[]) || [],
+            summary: n.summary as string,
+            isExpanded: i === 0,
+            extractedUseCases: ((n.extractedUseCases as Array<Record<string, unknown>>) || []).map(
+              (euc) => ({
+                title: euc.title as string,
+                account: n.account as string,
+                stage: euc.stage as string,
+                description: euc.description as string,
+                nextSteps: (euc.nextSteps as string[]) || [],
+                copied: false,
+              })
+            ),
+          }))
+          setNotes(transformed)
+        }
+      } catch (err) {
+        console.error('Failed to load meeting notes:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadNotes()
+  }, [])
 
   const toggleExpand = (id: string) => {
     setNotes((prev) =>
@@ -324,6 +316,18 @@ export function MeetingNotesPage() {
       <motion.div variants={itemVariants} className="space-y-4">
         <h2 className="text-xl font-semibold text-white">Processed Notes</h2>
 
+        {loading ? (
+          <div className="text-center py-12">
+            <Loader2 className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
+            <p className="text-gray-400">Loading meeting notes...</p>
+          </div>
+        ) : notes.length === 0 ? (
+          <div className="text-center py-12">
+            <FileText className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 text-lg">No meeting notes yet</p>
+            <p className="text-gray-500 text-sm mt-1">Upload your first meeting notes above to get started</p>
+          </div>
+        ) : (
         <AnimatePresence>
           {notes.map((note) => (
             <motion.div
@@ -422,6 +426,7 @@ export function MeetingNotesPage() {
             </motion.div>
           ))}
         </AnimatePresence>
+        )}
       </motion.div>
     </motion.div>
   )

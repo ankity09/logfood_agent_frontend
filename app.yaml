@@ -6,3 +6,5 @@ env:
     value: https://fevm-ay-demo-workspace.cloud.databricks.com
   - name: DATABRICKS_CHAT_ENDPOINT
     value: databricks-claude-haiku-4-5
+  - name: LAKEBASE_REST_URL
+    value: https://ep-steep-rice-d2fci9kw.database.us-east-1.cloud.databricks.com/api/2.0/workspace/7474653873260502/rest/databricks_postgres
