@@ -16,6 +16,10 @@ import {
   Server,
   ChevronDown,
   Loader2,
+  Sparkles,
+  Copy,
+  Check,
+  CalendarClock,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { databricksConfig } from '../../config'
@@ -53,15 +57,16 @@ interface UseCase {
   databricksServices: DatabricksService[]
   nextSteps: string[]
   stakeholders: string[]
+  goLiveDate: string | null
 }
 
-const stageConfig: Record<Stage, { label: string; color: string; bgColor: string; borderColor: string; order: number }> = {
-  validating: { label: 'Validating', color: 'text-neon-blue', bgColor: 'bg-neon-blue/10', borderColor: 'border-neon-blue/20', order: 1 },
-  scoping: { label: 'Scoping', color: 'text-neon-purple', bgColor: 'bg-neon-purple/10', borderColor: 'border-neon-purple/20', order: 2 },
-  evaluating: { label: 'Evaluating', color: 'text-yellow-400', bgColor: 'bg-yellow-400/10', borderColor: 'border-yellow-400/20', order: 3 },
-  confirming: { label: 'Confirming', color: 'text-neon-pink', bgColor: 'bg-neon-pink/10', borderColor: 'border-neon-pink/20', order: 4 },
-  onboarding: { label: 'Onboarding', color: 'text-primary', bgColor: 'bg-primary/10', borderColor: 'border-primary/20', order: 5 },
-  live: { label: 'Live', color: 'text-green-400', bgColor: 'bg-green-400/10', borderColor: 'border-green-400/20', order: 6 },
+const stageConfig: Record<Stage, { label: string; color: string; bgColor: string; borderColor: string; fillColor: string; order: number }> = {
+  validating: { label: 'Validating', color: 'text-neon-blue', bgColor: 'bg-neon-blue/10', borderColor: 'border-neon-blue/20', fillColor: 'bg-neon-blue/40', order: 1 },
+  scoping: { label: 'Scoping', color: 'text-neon-purple', bgColor: 'bg-neon-purple/10', borderColor: 'border-neon-purple/20', fillColor: 'bg-neon-purple/40', order: 2 },
+  evaluating: { label: 'Evaluating', color: 'text-yellow-400', bgColor: 'bg-yellow-400/10', borderColor: 'border-yellow-400/20', fillColor: 'bg-yellow-400/40', order: 3 },
+  confirming: { label: 'Confirming', color: 'text-neon-pink', bgColor: 'bg-neon-pink/10', borderColor: 'border-neon-pink/20', fillColor: 'bg-neon-pink/40', order: 4 },
+  onboarding: { label: 'Onboarding', color: 'text-primary', bgColor: 'bg-primary/10', borderColor: 'border-primary/20', fillColor: 'bg-primary/40', order: 5 },
+  live: { label: 'Live', color: 'text-green-400', bgColor: 'bg-green-400/10', borderColor: 'border-green-400/20', fillColor: 'bg-green-400/40', order: 6 },
 }
 
 const allServices: DatabricksService[] = ['AI/BI', 'DBSQL', 'Unity Catalog', 'AI/ML']
@@ -101,6 +106,18 @@ async function fetchUseCases(params?: {
   return res.json()
 }
 
+async function generateUpdate(rawNotes: string, useCaseContext: Record<string, unknown>): Promise<string> {
+  const url = `${databricksConfig.api.baseUrl}${databricksConfig.api.generateUpdateEndpoint}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rawNotes, useCaseContext }),
+  })
+  if (!res.ok) throw new Error(`Failed to generate update: ${res.status}`)
+  const data = await res.json()
+  return data.update
+}
+
 function StageBadge({ stage }: { stage: Stage }) {
   const config = stageConfig[stage]
   return (
@@ -119,6 +136,198 @@ function ServiceBadge({ service }: { service: DatabricksService }) {
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${serviceColors[service]}`}>
       {service}
     </span>
+  )
+}
+
+// --- Formatted Description ---
+function FormattedDescription({ text }: { text: string }) {
+  if (!text) return <p className="text-sm text-gray-500 italic">No description</p>
+
+  const lines = text.split('\n')
+  return (
+    <div className="space-y-1">
+      {lines.map((line, i) => {
+        const trimmed = line.trim()
+        if (!trimmed) return <div key={i} className="h-2" />
+        // Detect numbered section headers like "1. Project Summary" or "2. Current Status"
+        if (/^\d+\.\s+[A-Z]/.test(trimmed)) {
+          return (
+            <p key={i} className="text-sm text-white font-semibold mt-3 first:mt-0">
+              {trimmed}
+            </p>
+          )
+        }
+        return (
+          <p key={i} className="text-sm text-gray-300 leading-relaxed">
+            {trimmed}
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- Next Steps Log ---
+const NEXT_STEP_DATE_RE = /^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+([A-Z]{1,4})\s*[-–]\s*/
+
+function NextStepsLog({ steps }: { steps: string[] }) {
+  if (!steps || steps.length === 0) {
+    return <p className="text-sm text-gray-500 italic">No updates yet</p>
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {steps.map((step, i) => {
+        const match = step.match(NEXT_STEP_DATE_RE)
+        if (match) {
+          const date = match[1]
+          const initials = match[2]
+          const body = step.slice(match[0].length)
+          return (
+            <div key={i} className="flex items-start gap-3">
+              <div className="shrink-0 mt-0.5 flex flex-col items-center">
+                <span className="text-[10px] text-gray-500 font-mono">{date}</span>
+                <span className="text-[10px] text-primary font-semibold mt-0.5">{initials}</span>
+              </div>
+              <p className="text-sm text-gray-300 leading-relaxed">{body}</p>
+            </div>
+          )
+        }
+        // Fallback: plain bullet
+        return (
+          <div key={i} className="flex items-start gap-2">
+            <span className="text-primary mt-0.5 shrink-0">-</span>
+            <p className="text-sm text-gray-300">{step}</p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// --- Update Generator ---
+function UpdateGenerator({ useCase }: { useCase: UseCase }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [rawNotes, setRawNotes] = useState('')
+  const [generatedUpdate, setGeneratedUpdate] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const handleGenerate = async () => {
+    if (!rawNotes.trim()) return
+    setIsGenerating(true)
+    setGenError(null)
+    setGeneratedUpdate('')
+    try {
+      const result = await generateUpdate(rawNotes, {
+        title: useCase.title,
+        account: useCase.account,
+        stage: useCase.stage,
+        value: useCase.value,
+        owner: useCase.owner,
+        stakeholders: useCase.stakeholders,
+        databricksServices: useCase.databricksServices,
+        goLiveDate: useCase.goLiveDate,
+        description: useCase.description,
+        nextSteps: useCase.nextSteps,
+      })
+      setGeneratedUpdate(result)
+    } catch (err) {
+      console.error('Generate update error:', err)
+      setGenError('Failed to generate update. Please try again.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(generatedUpdate)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="border border-white/5 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-neon-purple" />
+          <span className="text-xs font-medium text-gray-300">Generate Salesforce Update</span>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 space-y-3">
+              <textarea
+                value={rawNotes}
+                onChange={(e) => setRawNotes(e.target.value)}
+                placeholder="Paste your raw meeting notes or observations here..."
+                className="w-full h-24 bg-dark-50 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-primary/50"
+              />
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating || !rawNotes.trim()}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-neon-purple/20 text-neon-purple hover:bg-neon-purple/30 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Generate Update
+                  </>
+                )}
+              </button>
+
+              {genError && (
+                <p className="text-xs text-red-400">{genError}</p>
+              )}
+
+              {generatedUpdate && (
+                <div className="space-y-2">
+                  <textarea
+                    value={generatedUpdate}
+                    onChange={(e) => setGeneratedUpdate(e.target.value)}
+                    className="w-full h-28 bg-dark-50 border border-neon-purple/20 rounded-lg px-3 py-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-neon-purple/50"
+                  />
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-gray-300 hover:bg-white/10 transition-colors"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-green-400" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        Copy to Clipboard
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -143,7 +352,7 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-        className="relative w-full max-w-lg bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-2xl bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -169,15 +378,15 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto no-scrollbar">
+        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto no-scrollbar">
           {/* Description */}
           <div>
             <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Description</h4>
-            <p className="text-sm text-gray-300 leading-relaxed">{useCase.description}</p>
+            <FormattedDescription text={useCase.description} />
           </div>
 
-          {/* Account & Owner */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Account, Owner & Go-Live Date */}
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Account</h4>
               <p className="text-sm text-white flex items-center gap-1.5">
@@ -192,6 +401,15 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
                 {useCase.owner}
               </p>
             </div>
+            <div>
+              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Target Go-Live</h4>
+              <p className="text-sm text-white flex items-center gap-1.5">
+                <CalendarClock className="w-3.5 h-3.5 text-gray-400" />
+                {useCase.goLiveDate
+                  ? new Date(useCase.goLiveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : 'Not set'}
+              </p>
+            </div>
           </div>
 
           {/* Databricks Services */}
@@ -204,7 +422,7 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
             </div>
           </div>
 
-          {/* Stage Info */}
+          {/* Stage Progress */}
           <div>
             <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stage Progress</h4>
             <div className="flex gap-1">
@@ -214,7 +432,7 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
                   <div
                     key={key}
                     className={`flex-1 h-2 rounded-full transition-colors ${
-                      cfg.order <= stgConfig.order ? stgConfig.bgColor.replace('/10', '/40') : 'bg-dark-50'
+                      cfg.order <= stgConfig.order ? stgConfig.fillColor : 'bg-dark-50'
                     }`}
                     title={cfg.label}
                   />
@@ -238,18 +456,14 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
             </div>
           </div>
 
-          {/* Next Steps */}
+          {/* Next Steps / Updates */}
           <div>
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Next Steps</h4>
-            <ul className="space-y-1.5">
-              {useCase.nextSteps.map((step, i) => (
-                <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
-                  <span className="text-primary mt-0.5 shrink-0">-</span>
-                  {step}
-                </li>
-              ))}
-            </ul>
+            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Next Steps / Updates</h4>
+            <NextStepsLog steps={useCase.nextSteps} />
           </div>
+
+          {/* AI Update Generator */}
+          <UpdateGenerator useCase={useCase} />
 
           {/* Meta */}
           <div className="flex items-center gap-4 pt-3 border-t border-white/5 text-xs text-gray-500">

@@ -280,6 +280,115 @@ app.post('/api/chat/stream', async (req, res) => {
 })
 
 /**
+ * Generate Salesforce update from raw notes + use case context
+ *
+ * Uses the same Model Serving endpoint as chat, with a specialized system prompt.
+ */
+app.post('/api/generate-update', async (req, res) => {
+  try {
+    const { rawNotes, useCaseContext } = req.body
+
+    if (!rawNotes) {
+      return res.status(400).json({ error: 'rawNotes is required' })
+    }
+
+    const token = getUserToken(req)
+    const userEmail = getUserEmail(req)
+
+    if (!token) {
+      return res.status(401).json({
+        error: 'Not authenticated',
+        hint: 'Ensure on-behalf-of-user auth is enabled',
+      })
+    }
+
+    const ctx = useCaseContext || {}
+    const contextBlock = [
+      `Use Case: ${ctx.title || 'N/A'}`,
+      `Account: ${ctx.account || 'N/A'}`,
+      `Stage: ${ctx.stage || 'N/A'}`,
+      `Value: ${ctx.value || 'N/A'}`,
+      `Owner: ${ctx.owner || 'N/A'}`,
+      ctx.stakeholders?.length ? `Stakeholders: ${ctx.stakeholders.join(', ')}` : '',
+      ctx.databricksServices?.length ? `Databricks Services: ${ctx.databricksServices.join(', ')}` : '',
+      ctx.goLiveDate ? `Target Go-Live: ${ctx.goLiveDate}` : '',
+      ctx.description ? `\nDescription:\n${ctx.description}` : '',
+      ctx.nextSteps?.length ? `\nRecent Updates:\n${ctx.nextSteps.slice(0, 10).join('\n')}` : '',
+    ].filter(Boolean).join('\n')
+
+    const systemPrompt = `You are a Salesforce CRM update assistant for Databricks Solutions Architects. Your job is to take raw meeting notes or observations and produce a concise, professional "Next Steps" update entry suitable for pasting into Salesforce.
+
+Format the output as a single entry in this exact format:
+[MM/DD/YY] [INITIALS] - [Concise update summarizing key points, decisions, and next actions]
+
+Rules:
+- Use today's date in MM/DD/YY format
+- Use the initials from the user's email or "SA" if unknown
+- Keep it concise but include all important details: decisions made, blockers, next actions, timeline changes
+- Use professional but direct language
+- Do not include headers, bullet points, or multiple paragraphs — it should be a single continuous entry
+- Reference specific people, dates, and action items from the notes
+- If the notes mention a next meeting or deadline, include it
+
+The user's email is: ${userEmail}`
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Here is the use case context:\n\n${contextBlock}\n\nHere are my raw notes:\n\n${rawNotes}\n\nPlease generate a Salesforce Next Steps update entry.` },
+    ]
+
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
+
+    console.log(`Generate update request from user: ${userEmail}`)
+
+    const response = await fetch(endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        messages,
+        max_tokens: config.chat.maxTokens,
+        temperature: 0.3,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Generate update API error (${response.status}):`, errorText)
+      return res.status(response.status).json({
+        error: 'Failed to generate update',
+        details: errorText,
+      })
+    }
+
+    const data = await response.json()
+
+    let update = ''
+    if (data.choices && data.choices[0]?.message?.content) {
+      update = data.choices[0].message.content
+    } else if (data.output) {
+      update = data.output
+    } else if (data.predictions && data.predictions[0]) {
+      update = typeof data.predictions[0] === 'string' ? data.predictions[0] : JSON.stringify(data.predictions[0])
+    } else if (typeof data === 'string') {
+      update = data
+    }
+
+    console.log(`Generate update response for user ${userEmail}, length: ${update.length}`)
+
+    res.json({ update })
+  } catch (error) {
+    console.error('Generate update error:', error)
+    res.status(500).json({
+      error: 'Failed to generate update',
+      details: error.message,
+    })
+  }
+})
+
+/**
  * User info endpoint - returns current user information
  */
 app.get('/api/user', (req, res) => {

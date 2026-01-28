@@ -85,7 +85,7 @@ router.get('/use-cases', async (req, res) => {
       SELECT
         uc.id, uc.title, uc.description, uc.stage, uc.value_cents,
         uc.databricks_services, uc.next_steps, uc.stakeholders,
-        uc.created_at, uc.updated_at,
+        uc.go_live_date, uc.created_at, uc.updated_at,
         a.id AS account_id, a.name AS account_name,
         u.id AS owner_id, u.name AS owner_name
       FROM use_cases uc
@@ -117,7 +117,7 @@ router.get('/use-cases/:id', async (req, res) => {
       SELECT
         uc.id, uc.title, uc.description, uc.stage, uc.value_cents,
         uc.databricks_services, uc.next_steps, uc.stakeholders,
-        uc.created_at, uc.updated_at,
+        uc.go_live_date, uc.created_at, uc.updated_at,
         a.id AS account_id, a.name AS account_name,
         u.id AS owner_id, u.name AS owner_name
       FROM use_cases uc
@@ -145,18 +145,19 @@ router.post('/use-cases', async (req, res) => {
 
     const {
       title, description, account_id, owner_id, stage,
-      value_cents, databricks_services, next_steps, stakeholders,
+      value_cents, databricks_services, next_steps, stakeholders, go_live_date,
     } = req.body
 
     const sql = `
-      INSERT INTO use_cases (title, description, account_id, owner_id, stage, value_cents, databricks_services, next_steps, stakeholders)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO use_cases (title, description, account_id, owner_id, stage, value_cents, databricks_services, next_steps, stakeholders, go_live_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `
 
     const rows = await query(token, sql, [
       title, description, account_id, owner_id, stage || 'validating',
       value_cents || 0, databricks_services || [], next_steps || [], stakeholders || [],
+      go_live_date || null,
     ])
 
     res.status(201).json(rows[0])
@@ -178,7 +179,7 @@ router.patch('/use-cases/:id', async (req, res) => {
     const allowed = [
       'title', 'description', 'stage', 'value_cents',
       'databricks_services', 'next_steps', 'stakeholders',
-      'account_id', 'owner_id',
+      'account_id', 'owner_id', 'go_live_date',
     ]
     const sets = []
     const params = []
@@ -446,6 +447,7 @@ function transformUseCase(row) {
     databricksServices: row.databricks_services || [],
     nextSteps: row.next_steps || [],
     stakeholders: row.stakeholders || [],
+    goLiveDate: row.go_live_date || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

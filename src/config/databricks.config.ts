@@ -60,6 +60,7 @@ export const databricksConfig = {
     extractedUseCasesEndpoint: '/extracted-use-cases',
     activitiesEndpoint: '/activities',
     statsEndpoint: '/stats',
+    generateUpdateEndpoint: '/generate-update',
   },
 
   // UI Configuration
