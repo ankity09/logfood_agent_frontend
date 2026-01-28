@@ -58,6 +58,94 @@ function getUserEmail(req) {
 }
 
 /**
+ * Service Principal Token Cache
+ * Caches the token with expiry to avoid unnecessary token refreshes
+ */
+let spTokenCache = {
+  token: null,
+  expiresAt: 0,
+}
+
+/**
+ * Get a token for the app's service principal using OAuth client credentials flow.
+ * This is used for Model Serving calls since on-behalf-of-user tokens may not have
+ * the required scopes for querying serving endpoints.
+ *
+ * Databricks Apps automatically inject:
+ * - DATABRICKS_CLIENT_ID
+ * - DATABRICKS_CLIENT_SECRET
+ * - DATABRICKS_HOST
+ */
+async function getServicePrincipalToken() {
+  // Return cached token if still valid (with 60s buffer)
+  if (spTokenCache.token && Date.now() < spTokenCache.expiresAt - 60000) {
+    return spTokenCache.token
+  }
+
+  const clientId = process.env.DATABRICKS_CLIENT_ID
+  const clientSecret = process.env.DATABRICKS_CLIENT_SECRET
+
+  if (!clientId || !clientSecret) {
+    console.log('Service principal credentials not available (DATABRICKS_CLIENT_ID/SECRET)')
+    return null
+  }
+
+  try {
+    const tokenUrl = `${config.databricks.instanceUrl}/oidc/v1/token`
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: 'all-apis',
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to get service principal token:', errorText)
+      return null
+    }
+
+    const data = await response.json()
+    spTokenCache.token = data.access_token
+    // Token typically valid for 1 hour
+    spTokenCache.expiresAt = Date.now() + (data.expires_in || 3600) * 1000
+
+    console.log('Service principal token obtained successfully')
+    return spTokenCache.token
+  } catch (error) {
+    console.error('Error getting service principal token:', error.message)
+    return null
+  }
+}
+
+/**
+ * Get the best available token for Model Serving calls.
+ * Prefers service principal token (more reliable scopes), falls back to user token.
+ */
+async function getModelServingToken(req) {
+  // Try service principal token first (has proper scopes for serving endpoints)
+  const spToken = await getServicePrincipalToken()
+  if (spToken) {
+    return { token: spToken, source: 'service-principal' }
+  }
+
+  // Fallback to user token
+  const userToken = getUserToken(req)
+  if (userToken) {
+    return { token: userToken, source: 'user' }
+  }
+
+  return { token: null, source: null }
+}
+
+/**
  * Health check endpoint
  */
 app.get('/api/health', (req, res) => {
@@ -116,7 +204,7 @@ app.post('/api/auth/dashboard-token', async (req, res) => {
 /**
  * Chat endpoint - proxy to Databricks Model Serving
  *
- * Uses the user's access token for authentication
+ * Uses service principal token for Model Serving (better scope handling)
  */
 app.post('/api/chat', async (req, res) => {
   try {
@@ -126,9 +214,10 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Messages array is required' })
     }
 
-    // Get user's access token
-    const token = getUserToken(req)
     const userEmail = getUserEmail(req)
+
+    // Get token for Model Serving (prefers service principal)
+    const { token, source } = await getModelServingToken(req)
 
     if (!token) {
       console.error(`Chat request failed for user ${userEmail}: No access token available`)
@@ -142,6 +231,7 @@ app.post('/api/chat', async (req, res) => {
 
     console.log(`Chat request from user: ${userEmail}`)
     console.log(`Endpoint: ${endpointUrl}`)
+    console.log(`Token source: ${source}`)
     console.log(`Messages count: ${messages.length}`)
 
     const response = await fetch(endpointUrl, {
@@ -206,7 +296,7 @@ app.post('/api/chat', async (req, res) => {
 /**
  * Streaming chat endpoint
  *
- * For real-time streaming responses from the AI model.
+ * Uses service principal token for Model Serving (better scope handling)
  */
 app.post('/api/chat/stream', async (req, res) => {
   try {
@@ -216,13 +306,15 @@ app.post('/api/chat/stream', async (req, res) => {
       return res.status(400).json({ error: 'Messages array is required' })
     }
 
-    const token = getUserToken(req)
     const userEmail = getUserEmail(req)
+
+    // Get token for Model Serving (prefers service principal)
+    const { token, source } = await getModelServingToken(req)
 
     if (!token) {
       return res.status(401).json({
         error: 'Not authenticated',
-        hint: 'Ensure on-behalf-of-user auth is enabled',
+        hint: 'Ensure on-behalf-of-user auth is enabled or service principal is configured',
       })
     }
 
@@ -234,6 +326,7 @@ app.post('/api/chat/stream', async (req, res) => {
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
 
     console.log(`Streaming chat request from user: ${userEmail}`)
+    console.log(`Token source: ${source}`)
 
     const response = await fetch(endpointUrl, {
       method: 'POST',
@@ -282,7 +375,7 @@ app.post('/api/chat/stream', async (req, res) => {
 /**
  * Generate Salesforce update from raw notes + use case context
  *
- * Uses the same Model Serving endpoint as chat, with a specialized system prompt.
+ * Uses service principal token for Model Serving (better scope handling)
  */
 app.post('/api/generate-update', async (req, res) => {
   try {
@@ -292,13 +385,15 @@ app.post('/api/generate-update', async (req, res) => {
       return res.status(400).json({ error: 'rawNotes is required' })
     }
 
-    const token = getUserToken(req)
     const userEmail = getUserEmail(req)
+
+    // Get token for Model Serving (prefers service principal)
+    const { token, source } = await getModelServingToken(req)
 
     if (!token) {
       return res.status(401).json({
         error: 'Not authenticated',
-        hint: 'Ensure on-behalf-of-user auth is enabled',
+        hint: 'Ensure on-behalf-of-user auth is enabled or service principal is configured',
       })
     }
 
@@ -340,6 +435,7 @@ The user's email is: ${userEmail}`
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
 
     console.log(`Generate update request from user: ${userEmail}`)
+    console.log(`Token source: ${source}`)
 
     const response = await fetch(endpointUrl, {
       method: 'POST',
