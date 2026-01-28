@@ -163,7 +163,15 @@ INSERT INTO use_cases (id, title, description, account_id, owner_id, stage, valu
     '2025-03-01',
     '2024-12-27T00:00:00Z'
   )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  stage = EXCLUDED.stage,
+  value_cents = EXCLUDED.value_cents,
+  databricks_services = EXCLUDED.databricks_services,
+  next_steps = EXCLUDED.next_steps,
+  stakeholders = EXCLUDED.stakeholders,
+  go_live_date = EXCLUDED.go_live_date;
 
 -- Meeting Notes  (prefix d0)
 INSERT INTO meeting_notes (id, filename, account_id, summary, attendees, uploaded_at) VALUES

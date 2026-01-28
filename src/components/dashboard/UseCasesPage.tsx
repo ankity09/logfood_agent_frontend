@@ -416,7 +416,7 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
           <div>
             <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Databricks Services</h4>
             <div className="flex flex-wrap gap-2">
-              {useCase.databricksServices.map((svc) => (
+              {(useCase.databricksServices || []).map((svc) => (
                 <ServiceBadge key={svc} service={svc} />
               ))}
             </div>
@@ -448,7 +448,7 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
           <div>
             <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stakeholders</h4>
             <div className="flex flex-wrap gap-2">
-              {useCase.stakeholders.map((s, i) => (
+              {(useCase.stakeholders || []).map((s, i) => (
                 <span key={i} className="text-xs bg-dark-50 text-gray-300 px-2.5 py-1 rounded-lg border border-white/5">
                   {s}
                 </span>
@@ -600,7 +600,7 @@ function StageColumnView({ filteredUseCases, onSelect }: { filteredUseCases: Use
                     {uc.account}
                   </p>
                   <div className="flex flex-wrap gap-1 mb-2">
-                    {uc.databricksServices.map((svc) => (
+                    {(uc.databricksServices || []).map((svc) => (
                       <span key={svc} className={`text-[10px] px-1.5 py-0.5 rounded border ${serviceColors[svc]}`}>
                         {svc}
                       </span>
@@ -656,7 +656,7 @@ function ListView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[];
                   </span>
                   <span className="flex items-center gap-1">
                     <Server className="w-3 h-3" />
-                    {uc.databricksServices.join(', ')}
+                    {(uc.databricksServices || []).join(', ')}
                   </span>
                   <span>{uc.value}</span>
                 </div>
