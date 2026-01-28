@@ -356,7 +356,7 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-        className="relative w-full max-w-2xl bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-3xl mx-4 bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
