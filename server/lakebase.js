@@ -12,6 +12,8 @@ import { config } from './config.js'
 
 const router = express.Router()
 
+let diagnosticRan = false
+
 /**
  * Helper: run a query by creating a fresh pg.Client with the user's OAuth token.
  * Each request gets its own connection to avoid token/session conflicts.
@@ -89,6 +91,32 @@ router.get('/use-cases', async (req, res) => {
       return res.status(401).json({ error: 'Not authenticated' })
     }
     console.log(`GET /api/use-cases: token present (${token.substring(0, 8)}...), filters:`, req.query)
+
+    // One-time diagnostic: log schema info to app logs
+    if (!diagnosticRan) {
+      diagnosticRan = true
+      try {
+        const diag = await query(token, `
+          SELECT current_user AS pg_user, current_database() AS db, current_schema() AS cur_schema
+        `)
+        console.log('DIAG: connection info:', JSON.stringify(diag[0]))
+
+        const schemas = await query(token, "SELECT schema_name FROM information_schema.schemata ORDER BY schema_name")
+        console.log('DIAG: visible schemas:', schemas.map(r => r.schema_name).join(', '))
+
+        const tables = await query(token, "SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema, table_name")
+        console.log('DIAG: user tables:', tables.map(r => `${r.table_schema}.${r.table_name}`).join(', '))
+
+        const searchPath = await query(token, "SHOW search_path")
+        console.log('DIAG: search_path:', JSON.stringify(searchPath[0]))
+
+        // Try counting with explicit public schema
+        const cnt = await query(token, 'SELECT COUNT(*)::int AS cnt FROM public.use_cases').catch(e => [{ cnt: -1, err: e.message }])
+        console.log('DIAG: public.use_cases count:', JSON.stringify(cnt[0]))
+      } catch (diagErr) {
+        console.error('DIAG error:', diagErr.message)
+      }
+    }
 
     const conditions = []
     const params = []
