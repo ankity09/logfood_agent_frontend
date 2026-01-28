@@ -252,85 +252,93 @@ function UpdateGenerator({ useCase }: { useCase: UseCase }) {
   }
 
   return (
-    <div className="border border-white/5 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-neon-purple" />
-          <span className="text-xs font-medium text-gray-300">Generate Salesforce Update</span>
-        </div>
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="px-3 pb-3 space-y-3">
-              <textarea
-                value={rawNotes}
-                onChange={(e) => setRawNotes(e.target.value)}
-                placeholder="Paste your raw meeting notes or observations here..."
-                className="w-full h-24 bg-dark-50 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 resize-none focus:outline-none focus:border-primary/50"
-              />
-              <button
-                onClick={handleGenerate}
-                disabled={isGenerating || !rawNotes.trim()}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-neon-purple/20 text-neon-purple hover:bg-neon-purple/30 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Generate Update
-                  </>
-                )}
-              </button>
-
-              {genError && (
-                <p className="text-xs text-red-400">{genError}</p>
-              )}
-
-              {generatedUpdate && (
-                <div className="space-y-2">
-                  <textarea
-                    value={generatedUpdate}
-                    onChange={(e) => setGeneratedUpdate(e.target.value)}
-                    className="w-full h-28 bg-dark-50 border border-neon-purple/20 rounded-lg px-3 py-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-neon-purple/50"
-                  />
-                  <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-gray-300 hover:bg-white/10 transition-colors"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-green-400" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        Copy to Clipboard
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
+    <div className="rounded-xl overflow-hidden bg-gradient-to-r from-neon-purple/20 via-primary/20 to-neon-purple/20 p-[1px]">
+      <div className="bg-dark-100 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors bg-gradient-to-r from-neon-purple/10 via-transparent to-primary/10"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-gradient-to-br from-neon-purple to-primary">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <div className="text-left">
+              <span className="text-sm font-semibold text-white">Generate Salesforce Update</span>
+              <p className="text-xs text-gray-400 mt-0.5">AI-powered update from your notes</p>
+            </div>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-neon-purple transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-4 space-y-3 border-t border-white/5">
+                <textarea
+                  value={rawNotes}
+                  onChange={(e) => setRawNotes(e.target.value)}
+                  placeholder="Paste your raw meeting notes or observations here..."
+                  className="w-full h-28 bg-dark-50 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 resize-none focus:outline-none focus:border-neon-purple/50 mt-3"
+                />
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !rawNotes.trim()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all bg-gradient-to-r from-neon-purple to-primary text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-neon-purple/20"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Generate Update
+                    </>
+                  )}
+                </button>
+
+                {genError && (
+                  <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{genError}</p>
+                )}
+
+                {generatedUpdate && (
+                  <div className="space-y-2 pt-2">
+                    <label className="text-xs text-gray-400 font-medium">Generated Update (editable):</label>
+                    <textarea
+                      value={generatedUpdate}
+                      onChange={(e) => setGeneratedUpdate(e.target.value)}
+                      className="w-full h-28 bg-dark-50 border border-neon-purple/30 rounded-lg px-3 py-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-neon-purple/50"
+                    />
+                    <button
+                      onClick={handleCopy}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium bg-white/10 text-white hover:bg-white/15 transition-colors"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-green-400" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy to Clipboard
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
