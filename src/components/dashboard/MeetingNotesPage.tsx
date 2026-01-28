@@ -15,6 +15,7 @@ import {
   ExternalLink,
   ClipboardCopy,
   Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { databricksConfig } from '../../config'
@@ -120,21 +121,127 @@ function ExtractedUseCaseCard({ useCase }: { useCase: ExtractedUseCase }) {
   )
 }
 
+/**
+ * Read file content as text
+ */
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target?.result as string)
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsText(file)
+  })
+}
+
+/**
+ * Call the AI extraction endpoint
+ */
+async function extractUseCasesFromNotes(
+  meetingNotes: string,
+  filename: string
+): Promise<{
+  summary: string
+  attendees: string[]
+  account: string | null
+  useCases: Array<{
+    title: string
+    description: string
+    stage: string
+    nextSteps: string[]
+  }>
+}> {
+  const url = `${databricksConfig.api.baseUrl}/extract-use-cases`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ meetingNotes, filename }),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    const detail = errBody.details || errBody.error || `HTTP ${res.status}`
+    throw new Error(detail)
+  }
+  return res.json()
+}
+
+/**
+ * Save meeting note to database
+ */
+async function saveMeetingNote(data: {
+  filename: string
+  account_id: string | null
+  summary: string
+  attendees: string[]
+}): Promise<{ id: string }> {
+  const url = `${databricksConfig.api.baseUrl}${databricksConfig.api.meetingNotesEndpoint}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    throw new Error(errBody.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
+ * Save extracted use case to database
+ */
+async function saveExtractedUseCase(data: {
+  meeting_note_id: string
+  title: string
+  description: string
+  suggested_stage: string
+  next_steps: string[]
+}): Promise<{ id: string }> {
+  const url = `${databricksConfig.api.baseUrl}${databricksConfig.api.extractedUseCasesEndpoint}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    throw new Error(errBody.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
+ * Fetch accounts list
+ */
+async function fetchAccounts(): Promise<Array<{ id: string; name: string }>> {
+  const url = `${databricksConfig.api.baseUrl}${databricksConfig.api.accountsEndpoint}`
+  const res = await fetch(url)
+  if (!res.ok) return []
+  return res.json()
+}
+
 export function MeetingNotesPage() {
   const [notes, setNotes] = useState<MeetingNote[]>([])
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [processingStatus, setProcessingStatus] = useState<string>('')
+  const [processingError, setProcessingError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function loadNotes() {
+    async function loadData() {
       try {
-        const res = await fetch(
-          `${databricksConfig.api.baseUrl}${databricksConfig.api.meetingNotesEndpoint}`
-        )
-        if (res.ok) {
-          const data = await res.json()
+        // Load meeting notes and accounts in parallel
+        const [notesRes, accountsData] = await Promise.all([
+          fetch(`${databricksConfig.api.baseUrl}${databricksConfig.api.meetingNotesEndpoint}`),
+          fetchAccounts(),
+        ])
+
+        setAccounts(accountsData)
+
+        if (notesRes.ok) {
+          const data = await notesRes.json()
           // Transform API response to MeetingNote shape
           const transformed: MeetingNote[] = data.map((n: Record<string, unknown>, i: number) => ({
             id: n.id as string,
@@ -158,12 +265,12 @@ export function MeetingNotesPage() {
           setNotes(transformed)
         }
       } catch (err) {
-        console.error('Failed to load meeting notes:', err)
+        console.error('Failed to load data:', err)
       } finally {
         setLoading(false)
       }
     }
-    loadNotes()
+    loadData()
   }, [])
 
   const toggleExpand = (id: string) => {
@@ -177,47 +284,106 @@ export function MeetingNotesPage() {
     setIsDragging(false)
     const files = e.dataTransfer.files
     if (files.length > 0) {
-      simulateUpload(files[0].name)
+      processFile(files[0])
     }
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files && files.length > 0) {
-      simulateUpload(files[0].name)
+      processFile(files[0])
     }
   }
 
-  const simulateUpload = (filename: string) => {
-    setUploadedFileName(filename)
+  const processFile = async (file: File) => {
+    setUploadedFileName(file.name)
     setIsProcessing(true)
+    setProcessingError(null)
+    setProcessingStatus('Reading file...')
 
-    // Simulate processing delay
-    setTimeout(() => {
-      const newNote: MeetingNote = {
-        id: Date.now().toString(),
-        filename,
-        uploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        account: 'New Account',
-        attendees: ['You', 'Client Team'],
-        summary: 'AI is analyzing your meeting notes. Use case details will be extracted and displayed here once processing is complete.',
-        extractedUseCases: [
-          {
-            title: 'Extracted Use Case',
-            account: 'New Account',
-            stage: 'Discovery',
-            description: 'This use case was automatically extracted from your uploaded meeting notes.',
-            nextSteps: ['Review extracted details', 'Update account information', 'Schedule follow-up'],
+    try {
+      // Step 1: Read file content
+      const fileContent = await readFileAsText(file)
+
+      if (!fileContent.trim()) {
+        throw new Error('File is empty')
+      }
+
+      setProcessingStatus('Analyzing with AI...')
+
+      // Step 2: Call AI extraction endpoint
+      const extracted = await extractUseCasesFromNotes(fileContent, file.name)
+
+      setProcessingStatus('Saving to database...')
+
+      // Step 3: Find matching account if mentioned
+      let accountId: string | null = null
+      let accountName = extracted.account || 'Unknown Account'
+      if (extracted.account) {
+        const matchedAccount = accounts.find(
+          (a) => a.name.toLowerCase().includes(extracted.account!.toLowerCase()) ||
+                 extracted.account!.toLowerCase().includes(a.name.toLowerCase())
+        )
+        if (matchedAccount) {
+          accountId = matchedAccount.id
+          accountName = matchedAccount.name
+        }
+      }
+
+      // Step 4: Save meeting note to database
+      const savedNote = await saveMeetingNote({
+        filename: file.name,
+        account_id: accountId,
+        summary: extracted.summary,
+        attendees: extracted.attendees,
+      })
+
+      // Step 5: Save extracted use cases to database
+      const savedUseCases: ExtractedUseCase[] = []
+      for (const uc of extracted.useCases) {
+        try {
+          await saveExtractedUseCase({
+            meeting_note_id: savedNote.id,
+            title: uc.title,
+            description: uc.description,
+            suggested_stage: uc.stage,
+            next_steps: uc.nextSteps,
+          })
+          savedUseCases.push({
+            title: uc.title,
+            account: accountName,
+            stage: uc.stage,
+            description: uc.description,
+            nextSteps: uc.nextSteps,
             copied: false,
-          },
-        ],
+          })
+        } catch (err) {
+          console.error('Failed to save extracted use case:', err)
+        }
+      }
+
+      // Step 6: Add to local state
+      const newNote: MeetingNote = {
+        id: savedNote.id,
+        filename: file.name,
+        uploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        account: accountName,
+        attendees: extracted.attendees,
+        summary: extracted.summary,
+        extractedUseCases: savedUseCases,
         isExpanded: true,
       }
 
       setNotes((prev) => [newNote, ...prev])
+      setProcessingStatus('')
+    } catch (err) {
+      console.error('Processing error:', err)
+      setProcessingError(err instanceof Error ? err.message : 'Failed to process file')
+      setProcessingStatus('')
+    } finally {
       setIsProcessing(false)
       setUploadedFileName(null)
-    }, 3000)
+    }
   }
 
   const copyAllUseCases = (note: MeetingNote) => {
@@ -239,7 +405,7 @@ export function MeetingNotesPage() {
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white">Meeting Notes</h1>
-          <p className="text-gray-400 mt-1">Upload meeting notes and extract use case details automatically.</p>
+          <p className="text-gray-400 mt-1">Upload meeting notes and extract use case details automatically with AI.</p>
         </div>
       </motion.div>
 
@@ -263,12 +429,12 @@ export function MeetingNotesPage() {
               </div>
               <div>
                 <p className="text-white font-medium">Processing "{uploadedFileName}"</p>
-                <p className="text-sm text-gray-400 mt-1">Extracting use case details from your meeting notes...</p>
+                <p className="text-sm text-primary mt-1">{processingStatus}</p>
               </div>
             </div>
           ) : (
             <>
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-neon-purple/20 flex items-center justify-center mx-auto mb-4 border border-primary/20">
                 <Upload className="w-8 h-8 text-primary" />
               </div>
               <h3 className="text-lg font-semibold text-white mb-2">Upload Meeting Notes</h3>
@@ -289,6 +455,27 @@ export function MeetingNotesPage() {
             </>
           )}
         </div>
+
+        {/* Error Display */}
+        {processingError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3"
+          >
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-400">Failed to process file</p>
+              <p className="text-xs text-red-400/70 mt-1">{processingError}</p>
+            </div>
+            <button
+              onClick={() => setProcessingError(null)}
+              className="ml-auto text-red-400 hover:text-red-300 text-xs"
+            >
+              Dismiss
+            </button>
+          </motion.div>
+        )}
       </motion.div>
 
       {/* How it works */}
@@ -296,7 +483,7 @@ export function MeetingNotesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { step: '1', title: 'Upload Notes', desc: 'Upload your raw meeting notes in any text format.', icon: <Upload className="w-5 h-5" /> },
-            { step: '2', title: 'AI Extraction', desc: 'Our AI analyzes and extracts use case details, stages, and next steps.', icon: <Sparkles className="w-5 h-5" /> },
+            { step: '2', title: 'AI Extraction', desc: 'Databricks AI analyzes and extracts use cases, stages, and next steps.', icon: <Sparkles className="w-5 h-5" /> },
             { step: '3', title: 'Copy & Export', desc: 'Copy extracted information to paste into Salesforce or other tools.', icon: <ClipboardCopy className="w-5 h-5" /> },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3 p-4 rounded-xl bg-dark-100/30 border border-white/5">
@@ -343,7 +530,7 @@ export function MeetingNotesPage() {
                   className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-neon-purple/20 text-primary border border-primary/20">
                       <FileText className="w-5 h-5" />
                     </div>
                     <div className="text-left">
@@ -388,35 +575,43 @@ export function MeetingNotesPage() {
                         </div>
 
                         {/* Attendees */}
-                        <div>
-                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Attendees</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {note.attendees.map((a, i) => (
-                              <span key={i} className="text-xs bg-dark-50 text-gray-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
-                                <Users className="w-3 h-3" />
-                                {a}
-                              </span>
-                            ))}
+                        {note.attendees.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Attendees</h4>
+                            <div className="flex flex-wrap gap-2">
+                              {note.attendees.map((a, i) => (
+                                <span key={i} className="text-xs bg-dark-50 text-gray-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                                  <Users className="w-3 h-3" />
+                                  {a}
+                                </span>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Extracted Use Cases */}
                         <div>
                           <div className="flex items-center justify-between mb-3">
                             <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Extracted Use Cases</h4>
-                            <button
-                              onClick={() => copyAllUseCases(note)}
-                              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-                            >
-                              <ClipboardCopy className="w-3 h-3" />
-                              Copy All
-                            </button>
+                            {note.extractedUseCases.length > 0 && (
+                              <button
+                                onClick={() => copyAllUseCases(note)}
+                                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+                              >
+                                <ClipboardCopy className="w-3 h-3" />
+                                Copy All
+                              </button>
+                            )}
                           </div>
-                          <div className="space-y-3">
-                            {note.extractedUseCases.map((uc, i) => (
-                              <ExtractedUseCaseCard key={i} useCase={uc} />
-                            ))}
-                          </div>
+                          {note.extractedUseCases.length > 0 ? (
+                            <div className="space-y-3">
+                              {note.extractedUseCases.map((uc, i) => (
+                                <ExtractedUseCaseCard key={i} useCase={uc} />
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 italic">No use cases were extracted from this meeting.</p>
+                          )}
                         </div>
                       </div>
                     </motion.div>

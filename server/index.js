@@ -485,6 +485,158 @@ The user's email is: ${userEmail}`
 })
 
 /**
+ * Extract use cases from meeting notes using AI
+ *
+ * Takes raw meeting notes text and uses Model Serving to extract
+ * structured use case information.
+ */
+app.post('/api/extract-use-cases', async (req, res) => {
+  try {
+    const { meetingNotes, filename } = req.body
+
+    if (!meetingNotes) {
+      return res.status(400).json({ error: 'meetingNotes is required' })
+    }
+
+    const userEmail = getUserEmail(req)
+
+    // Get token for Model Serving (prefers service principal)
+    const { token, source } = await getModelServingToken(req)
+
+    if (!token) {
+      return res.status(401).json({
+        error: 'Not authenticated',
+        hint: 'Ensure on-behalf-of-user auth is enabled or service principal is configured',
+      })
+    }
+
+    const systemPrompt = `You are an AI assistant that analyzes meeting notes and extracts potential Databricks use cases and opportunities.
+
+Your task is to analyze the meeting notes and extract:
+1. A brief summary of the meeting (2-3 sentences)
+2. List of attendees mentioned
+3. The account/company name if mentioned
+4. Any potential use cases or opportunities discussed
+
+For each use case, extract:
+- title: A concise title for the use case
+- description: A brief description of what the customer wants to achieve
+- stage: One of "scoping", "validating", "evaluating", "confirming", "onboarding", or "live" based on context clues
+- nextSteps: Array of 2-4 actionable next steps
+
+Respond ONLY with valid JSON in this exact format (no markdown, no code blocks, just raw JSON):
+{
+  "summary": "Brief meeting summary",
+  "attendees": ["Person 1", "Person 2"],
+  "account": "Company Name or null if not mentioned",
+  "useCases": [
+    {
+      "title": "Use Case Title",
+      "description": "Description of the use case",
+      "stage": "validating",
+      "nextSteps": ["Next step 1", "Next step 2"]
+    }
+  ]
+}
+
+If no clear use cases are found, return an empty useCases array.
+If attendees are not clearly listed, make reasonable inferences or return an empty array.
+Always try to identify at least one potential use case from the discussion.`
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `Please analyze these meeting notes${filename ? ` from file "${filename}"` : ''}:\n\n${meetingNotes}` },
+    ]
+
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
+
+    console.log(`Extract use cases request from user: ${userEmail}`)
+    console.log(`Token source: ${source}`)
+    console.log(`Notes length: ${meetingNotes.length} characters`)
+
+    const response = await fetch(endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        messages,
+        max_tokens: 2000,
+        temperature: 0.3,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Extract use cases API error (${response.status}):`, errorText)
+      return res.status(response.status).json({
+        error: 'Failed to extract use cases',
+        details: errorText,
+      })
+    }
+
+    const data = await response.json()
+
+    let content = ''
+    if (data.choices && data.choices[0]?.message?.content) {
+      content = data.choices[0].message.content
+    } else if (data.output) {
+      content = data.output
+    } else if (data.predictions && data.predictions[0]) {
+      content = typeof data.predictions[0] === 'string' ? data.predictions[0] : JSON.stringify(data.predictions[0])
+    } else if (typeof data === 'string') {
+      content = data
+    }
+
+    console.log(`Extract use cases raw response for user ${userEmail}:`, content.substring(0, 200))
+
+    // Parse the JSON response
+    let extracted
+    try {
+      // Clean up potential markdown code blocks
+      let cleanContent = content.trim()
+      if (cleanContent.startsWith('```json')) {
+        cleanContent = cleanContent.slice(7)
+      } else if (cleanContent.startsWith('```')) {
+        cleanContent = cleanContent.slice(3)
+      }
+      if (cleanContent.endsWith('```')) {
+        cleanContent = cleanContent.slice(0, -3)
+      }
+      cleanContent = cleanContent.trim()
+
+      extracted = JSON.parse(cleanContent)
+    } catch (parseError) {
+      console.error('Failed to parse AI response as JSON:', parseError.message)
+      console.error('Raw content:', content)
+      // Return a fallback structure
+      extracted = {
+        summary: 'Meeting notes processed. AI could not extract structured data.',
+        attendees: [],
+        account: null,
+        useCases: [{
+          title: 'Potential Opportunity',
+          description: 'Review the meeting notes for details on the discussion.',
+          stage: 'scoping',
+          nextSteps: ['Review meeting notes', 'Schedule follow-up call'],
+        }],
+      }
+    }
+
+    console.log(`Extract use cases success for user ${userEmail}: ${extracted.useCases?.length || 0} use cases found`)
+
+    res.json(extracted)
+  } catch (error) {
+    console.error('Extract use cases error:', error)
+    res.status(500).json({
+      error: 'Failed to extract use cases',
+      details: error.message,
+    })
+  }
+})
+
+/**
  * User info endpoint - returns current user information
  */
 app.get('/api/user', (req, res) => {

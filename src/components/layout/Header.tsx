@@ -12,9 +12,10 @@ interface HeaderProps {
   tabs: Tab[]
   activeTab: string
   onTabChange: (tabId: string) => void
+  onDocumentationClick?: () => void
 }
 
-export function Header({ tabs, activeTab, onTabChange }: HeaderProps) {
+export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -84,8 +85,18 @@ export function Header({ tabs, activeTab, onTabChange }: HeaderProps) {
 
           {/* Right side actions */}
           <div className="hidden md:flex items-center gap-4">
-            <button className="btn-ghost text-sm">Documentation</button>
-            <button className="btn-primary text-sm">Get Started</button>
+            <button
+              className="btn-ghost text-sm"
+              onClick={() => onDocumentationClick ? onDocumentationClick() : onTabChange('documentation')}
+            >
+              Documentation
+            </button>
+            <button
+              className="btn-primary text-sm"
+              onClick={() => onTabChange('usecases')}
+            >
+              Get Started
+            </button>
           </div>
 
           {/* Mobile menu button */}
@@ -126,8 +137,24 @@ export function Header({ tabs, activeTab, onTabChange }: HeaderProps) {
                 </button>
               ))}
               <div className="pt-4 border-t border-white/10 space-y-2">
-                <button className="w-full btn-ghost text-left">Documentation</button>
-                <button className="w-full btn-primary">Get Started</button>
+                <button
+                  className="w-full btn-ghost text-left"
+                  onClick={() => {
+                    onDocumentationClick ? onDocumentationClick() : onTabChange('documentation')
+                    setIsMobileMenuOpen(false)
+                  }}
+                >
+                  Documentation
+                </button>
+                <button
+                  className="w-full btn-primary"
+                  onClick={() => {
+                    onTabChange('usecases')
+                    setIsMobileMenuOpen(false)
+                  }}
+                >
+                  Get Started
+                </button>
               </div>
             </div>
           </motion.div>
