@@ -350,26 +350,31 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* Modal */}
+      {/* Modal - Extra Large */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
         transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
-        className="relative w-full max-w-3xl mx-4 bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-6xl mx-4 bg-dark-100 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-white/5">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0 mt-0.5">
-              <Target className="w-5 h-5" />
+              <Target className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">{useCase.title}</h2>
-              <div className="flex items-center gap-2 mt-2">
+              <h2 className="text-xl font-semibold text-white">{useCase.title}</h2>
+              <div className="flex items-center gap-3 mt-2">
                 <StageBadge stage={useCase.stage} />
-                <span className="text-xs text-gray-500">{useCase.value}</span>
+                <span className="text-sm text-gray-400">{useCase.value}</span>
+                <span className="text-sm text-gray-500">•</span>
+                <span className="text-sm text-gray-400 flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5" />
+                  {useCase.account}
+                </span>
               </div>
             </div>
           </div>
@@ -381,96 +386,101 @@ function UseCaseDetailModal({ useCase, onClose }: { useCase: UseCase; onClose: (
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto no-scrollbar">
-          {/* Description */}
-          <div>
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Description</h4>
-            <FormattedDescription text={useCase.description} />
+        {/* Body - Two Column Layout */}
+        <div className="p-6 max-h-[80vh] overflow-y-auto no-scrollbar">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column - AI Generator & Next Steps */}
+            <div className="space-y-6">
+              {/* AI Update Generator - Now at the top */}
+              <UpdateGenerator useCase={useCase} />
+
+              {/* Next Steps / Updates */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Next Steps / Updates</h4>
+                <div className="bg-dark-50/50 rounded-xl p-4 border border-white/5 max-h-[300px] overflow-y-auto no-scrollbar">
+                  <NextStepsLog steps={useCase.nextSteps} />
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column - Details & Description */}
+            <div className="space-y-6">
+              {/* Quick Info Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-dark-50/50 rounded-xl p-4 border border-white/5">
+                  <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Owner</h4>
+                  <p className="text-sm text-white flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-gray-400" />
+                    {useCase.owner}
+                  </p>
+                </div>
+                <div className="bg-dark-50/50 rounded-xl p-4 border border-white/5">
+                  <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Target Go-Live</h4>
+                  <p className="text-sm text-white flex items-center gap-1.5">
+                    <CalendarClock className="w-4 h-4 text-gray-400" />
+                    {useCase.goLiveDate
+                      ? new Date(useCase.goLiveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'Not set'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Databricks Services */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Databricks Services</h4>
+                <div className="flex flex-wrap gap-2">
+                  {(useCase.databricksServices || []).map((svc) => (
+                    <ServiceBadge key={svc} service={svc} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Stage Progress */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stage Progress</h4>
+                <div className="flex gap-1">
+                  {Object.entries(stageConfig)
+                    .sort(([, a], [, b]) => a.order - b.order)
+                    .map(([key, cfg]) => (
+                      <div
+                        key={key}
+                        className={`flex-1 h-2.5 rounded-full transition-colors ${
+                          cfg.order <= stgConfig.order ? stgConfig.fillColor : 'bg-dark-50'
+                        }`}
+                        title={cfg.label}
+                      />
+                    ))}
+                </div>
+                <div className="flex justify-between mt-1.5">
+                  <span className="text-xs text-gray-500">Validating</span>
+                  <span className="text-xs text-gray-500">Live</span>
+                </div>
+              </div>
+
+              {/* Stakeholders */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stakeholders</h4>
+                <div className="flex flex-wrap gap-2">
+                  {(useCase.stakeholders || []).map((s, i) => (
+                    <span key={i} className="text-sm bg-dark-50 text-gray-300 px-3 py-1.5 rounded-lg border border-white/5">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Description - Now at the bottom */}
+              <div>
+                <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Description</h4>
+                <div className="bg-dark-50/50 rounded-xl p-4 border border-white/5">
+                  <FormattedDescription text={useCase.description} />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Account, Owner & Go-Live Date */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Account</h4>
-              <p className="text-sm text-white flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-gray-400" />
-                {useCase.account}
-              </p>
-            </div>
-            <div>
-              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Owner</h4>
-              <p className="text-sm text-white flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-gray-400" />
-                {useCase.owner}
-              </p>
-            </div>
-            <div>
-              <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Target Go-Live</h4>
-              <p className="text-sm text-white flex items-center gap-1.5">
-                <CalendarClock className="w-3.5 h-3.5 text-gray-400" />
-                {useCase.goLiveDate
-                  ? new Date(useCase.goLiveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'Not set'}
-              </p>
-            </div>
-          </div>
-
-          {/* Databricks Services */}
-          <div>
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Databricks Services</h4>
-            <div className="flex flex-wrap gap-2">
-              {(useCase.databricksServices || []).map((svc) => (
-                <ServiceBadge key={svc} service={svc} />
-              ))}
-            </div>
-          </div>
-
-          {/* Stage Progress */}
-          <div>
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stage Progress</h4>
-            <div className="flex gap-1">
-              {Object.entries(stageConfig)
-                .sort(([, a], [, b]) => a.order - b.order)
-                .map(([key, cfg]) => (
-                  <div
-                    key={key}
-                    className={`flex-1 h-2 rounded-full transition-colors ${
-                      cfg.order <= stgConfig.order ? stgConfig.fillColor : 'bg-dark-50'
-                    }`}
-                    title={cfg.label}
-                  />
-                ))}
-            </div>
-            <div className="flex justify-between mt-1.5">
-              <span className="text-xs text-gray-500">Validating</span>
-              <span className="text-xs text-gray-500">Live</span>
-            </div>
-          </div>
-
-          {/* Stakeholders */}
-          <div>
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Stakeholders</h4>
-            <div className="flex flex-wrap gap-2">
-              {(useCase.stakeholders || []).map((s, i) => (
-                <span key={i} className="text-xs bg-dark-50 text-gray-300 px-2.5 py-1 rounded-lg border border-white/5">
-                  {s}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Next Steps / Updates */}
-          <div>
-            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Next Steps / Updates</h4>
-            <NextStepsLog steps={useCase.nextSteps} />
-          </div>
-
-          {/* AI Update Generator */}
-          <UpdateGenerator useCase={useCase} />
-
-          {/* Meta */}
-          <div className="flex items-center gap-4 pt-3 border-t border-white/5 text-xs text-gray-500">
+          {/* Meta - Full Width Footer */}
+          <div className="flex items-center gap-4 pt-4 mt-6 border-t border-white/5 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <Calendar className="w-3 h-3" />
               Created: {new Date(useCase.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
