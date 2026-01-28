@@ -113,7 +113,11 @@ async function generateUpdate(rawNotes: string, useCaseContext: Record<string, u
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rawNotes, useCaseContext }),
   })
-  if (!res.ok) throw new Error(`Failed to generate update: ${res.status}`)
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    const detail = errBody.details || errBody.error || `HTTP ${res.status}`
+    throw new Error(detail)
+  }
   const data = await res.json()
   return data.update
 }
@@ -235,7 +239,7 @@ function UpdateGenerator({ useCase }: { useCase: UseCase }) {
       setGeneratedUpdate(result)
     } catch (err) {
       console.error('Generate update error:', err)
-      setGenError('Failed to generate update. Please try again.')
+      setGenError(err instanceof Error ? err.message : 'Failed to generate update. Please try again.')
     } finally {
       setIsGenerating(false)
     }
