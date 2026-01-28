@@ -1,0 +1,186 @@
+# LogFood Agent Frontend
+
+A full-stack Databricks App for managing sales use-case pipelines, meeting notes, and AI-powered chat — built with React, Express, and Databricks Lakebase.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Databricks App                    │
+│                                                     │
+│  ┌──────────────┐        ┌───────────────────────┐  │
+│  │  React SPA   │──API──▶│    Express Server     │  │
+│  │  (Vite+TS)   │        │    (server/index.js)  │  │
+│  └──────────────┘        └───┬──────────┬────────┘  │
+│                              │          │           │
+└──────────────────────────────┼──────────┼───────────┘
+                               │          │
+                    ┌──────────▼──┐  ┌────▼──────────────┐
+                    │  Lakebase   │  │ Model Serving      │
+                    │  (Postgres) │  │ (Chat Endpoint)    │
+                    └─────────────┘  └────────────────────┘
+```
+
+- **Frontend**: React 18 + TypeScript + Tailwind CSS + Framer Motion
+- **Backend**: Express.js serving the SPA and API routes
+- **Database**: Databricks Lakebase (Postgres-compatible, autoscaling)
+- **AI Chat**: Proxied through Databricks Model Serving (Claude Haiku 4.5)
+- **Auth**: On-behalf-of-user via `X-Forwarded-Access-Token` (Databricks Apps)
+
+## Pages
+
+| Tab | Description |
+|---|---|
+| **Overview** | Dashboard with pipeline stats, stage counts, and recent activity |
+| **Agent** | AI chat interface backed by a Databricks Model Serving endpoint |
+| **Use Cases** | Filterable pipeline of sales use cases with stage/service/search filters |
+| **Meeting Notes** | Uploaded meeting notes with AI-extracted use cases |
+
+## Project Structure
+
+```
+├── app.yaml                  # Databricks App deployment config
+├── package.json
+├── index.html                # Vite entry point
+├── vite.config.ts
+├── tailwind.config.js
+├── tsconfig.json
+├── db/
+│   ├── migration.sql         # Schema DDL + seed data
+│   └── seed.sql              # Standalone seed data (idempotent)
+├── server/
+│   ├── index.js              # Express server entry point
+│   ├── config.js             # Centralized config (env vars)
+│   └── lakebase.js           # Lakebase Postgres routes (pg driver)
+└── src/
+    ├── App.tsx               # Main app with tab routing
+    ├── main.tsx
+    ├── config/
+    │   └── databricks.config.ts  # Frontend API config
+    ├── components/
+    │   ├── layout/           # Sidebar, header layout
+    │   ├── dashboard/        # OverviewDashboard, AgentPage, UseCasesPage, MeetingNotesPage
+    │   ├── chatbot/          # Chat interface components
+    │   └── ui/               # Shared UI primitives
+    └── styles/
+```
+
+## Database Schema
+
+Six tables in Lakebase (`databricks_postgres`):
+
+| Table | Description |
+|---|---|
+| `accounts` | Customer companies |
+| `users` | Internal team members / owners |
+| `use_cases` | Core pipeline entity with stage, value, services, stakeholders |
+| `meeting_notes` | Uploaded meeting documents with summaries |
+| `extracted_use_cases` | AI-extracted use cases linked to meeting notes |
+| `activities` | Activity feed (meetings, use-case changes, notes) |
+
+Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` → `onboarding` → `live`
+
+## Prerequisites
+
+- Node.js 18+
+- A Databricks workspace with:
+  - A **Lakebase Autoscaling** instance
+  - A **Model Serving** endpoint (for AI chat)
+  - A **Databricks App** configured with on-behalf-of-user auth
+
+## Local Development
+
+```bash
+# Install dependencies
+npm install
+
+# Set environment variables (or use defaults in server/config.js)
+export DATABRICKS_HOST=https://your-workspace.cloud.databricks.com
+export DATABRICKS_TOKEN=your-pat-token
+export LAKEBASE_PG_HOST=your-lakebase-host.database.us-east-1.cloud.databricks.com
+export LAKEBASE_PG_DATABASE=databricks_postgres
+export LAKEBASE_PG_USER=your.email@databricks.com
+
+# Run frontend dev server (hot reload)
+npm run dev
+
+# Run backend server (separate terminal)
+npm run dev:server
+```
+
+## Database Setup
+
+1. Create a Lakebase Autoscaling instance in your Databricks workspace.
+2. Run the migration to create tables:
+   ```bash
+   psql "postgresql://user@host:5432/databricks_postgres?sslmode=require" -f db/migration.sql
+   ```
+   Or paste the contents of `db/migration.sql` into the Lakebase SQL editor.
+
+3. If seed data was not included in the migration, run `db/seed.sql` separately via the SQL editor.
+
+## Building for Production
+
+```bash
+npm run build
+```
+
+This compiles TypeScript and builds the Vite frontend into `dist/`. The Express server serves these static files in production.
+
+## Deploying to Databricks Apps
+
+1. Push to your Git repository.
+2. In the Databricks workspace, create or update a Databricks App pointing to this repo.
+3. Configure `app.yaml` environment variables as needed.
+4. The app runs `node server/index.js` which serves both the API and the built frontend.
+
+### `app.yaml` Environment Variables
+
+| Variable | Description |
+|---|---|
+| `DATABRICKS_HOST` | Databricks workspace URL |
+| `DATABRICKS_CHAT_ENDPOINT` | Model Serving endpoint name for chat |
+| `LAKEBASE_PG_HOST` | Lakebase Postgres wire-protocol host |
+| `LAKEBASE_PG_DATABASE` | Database name (default: `databricks_postgres`) |
+| `LAKEBASE_PG_USER` | Databricks identity used for Postgres auth |
+
+## API Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/user` | Current user info |
+| `POST` | `/api/auth/dashboard-token` | Get token for dashboard embedding |
+| `POST` | `/api/chat` | Chat with AI |
+| `POST` | `/api/chat/stream` | Streaming chat |
+| `GET` | `/api/use-cases` | List use cases (filters: `stage`, `service`, `date`, `search`) |
+| `GET` | `/api/use-cases/:id` | Get single use case |
+| `POST` | `/api/use-cases` | Create use case |
+| `PATCH` | `/api/use-cases/:id` | Update use case |
+| `GET` | `/api/accounts` | List accounts |
+| `GET` | `/api/meeting-notes` | List meeting notes with extracted use cases |
+| `POST` | `/api/meeting-notes` | Create meeting note |
+| `POST` | `/api/extracted-use-cases` | Create extracted use case |
+| `GET` | `/api/activities` | Recent activities (query: `limit`) |
+| `POST` | `/api/activities` | Create activity |
+| `GET` | `/api/stats` | Aggregated dashboard stats |
+
+## Lakebase Connection Details
+
+The backend connects to Lakebase using the **Postgres wire protocol** via the `pg` npm package. Each API request creates a fresh `pg.Client` connection using the user's OAuth token as the Postgres password. This approach:
+
+- Bypasses the PostgREST Data API (which requires `SET ROLE` not supported in Apps)
+- Uses on-behalf-of-user auth for per-user access control
+- Creates per-request connections to avoid stale token issues with connection pooling
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, TypeScript, Tailwind CSS, Framer Motion, Lucide Icons |
+| Backend | Express.js, Node.js |
+| Database | Databricks Lakebase (PostgreSQL-compatible) |
+| DB Driver | `pg` (node-postgres) |
+| AI Chat | Databricks Model Serving |
+| Build | Vite |
+| Deployment | Databricks Apps |
