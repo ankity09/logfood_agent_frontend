@@ -48,8 +48,25 @@ router.get('/lakebase-health', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'No token', hint: 'x-forwarded-access-token header missing' })
 
-    const rows = await query(token, 'SELECT current_user AS pg_user, current_database() AS db, COUNT(*)::int AS use_case_count FROM use_cases')
-    res.json({ status: 'connected', pgUser: rows[0].pg_user, database: rows[0].db, useCaseCount: rows[0].use_case_count })
+    // Run multiple diagnostic queries
+    const [infoRows, schemaRows, tableRows, countRows] = await Promise.all([
+      query(token, "SELECT current_user AS pg_user, current_database() AS db, current_schema() AS current_schema, setting AS search_path FROM pg_settings WHERE name = 'search_path'"),
+      query(token, "SELECT schema_name FROM information_schema.schemata ORDER BY schema_name"),
+      query(token, "SELECT table_schema, table_name FROM information_schema.tables WHERE table_name = 'use_cases'"),
+      query(token, 'SELECT COUNT(*)::int AS cnt FROM use_cases').catch((err) => [{ cnt: -1, error: err.message }]),
+    ])
+
+    res.json({
+      status: 'connected',
+      pgUser: infoRows[0]?.pg_user,
+      database: infoRows[0]?.db,
+      currentSchema: infoRows[0]?.current_schema,
+      searchPath: infoRows[0]?.search_path,
+      schemas: schemaRows.map((r) => r.schema_name),
+      useCasesTableLocation: tableRows.map((r) => `${r.table_schema}.${r.table_name}`),
+      useCaseCount: countRows[0]?.cnt,
+      countError: countRows[0]?.error || null,
+    })
   } catch (error) {
     console.error('Lakebase health check failed:', error.message)
     res.status(500).json({ status: 'error', error: error.message })
