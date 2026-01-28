@@ -8,7 +8,9 @@
  * - DATABRICKS_HOST: Databricks workspace URL
  * - DATABRICKS_TOKEN: Personal Access Token or Service Principal token
  * - DATABRICKS_CHAT_ENDPOINT: Model serving endpoint name for chat
- * - LAKEBASE_REST_URL: Lakebase Data API REST endpoint URL
+ * - LAKEBASE_PG_HOST: Lakebase Postgres host
+ * - LAKEBASE_PG_DATABASE: Lakebase database name
+ * - LAKEBASE_PG_USER: Lakebase Postgres user (Databricks identity)
  * - CHAT_MAX_TOKENS: Maximum tokens for chat responses
  * - CHAT_TEMPERATURE: Temperature for chat responses
  *
@@ -40,10 +42,14 @@ export const config = {
   },
 
   lakebase: {
-    // Lakebase Data API REST endpoint URL
-    restUrl:
-      process.env.LAKEBASE_REST_URL ||
-      'https://ep-steep-rice-d2fci9kw.database.us-east-1.cloud.databricks.com/api/2.0/workspace/7474653873260502/rest/databricks_postgres',
+    // Postgres wire protocol connection config
+    pgHost:
+      process.env.LAKEBASE_PG_HOST ||
+      'ep-steep-rice-d2fci9kw.database.us-east-1.cloud.databricks.com',
+    pgDatabase: process.env.LAKEBASE_PG_DATABASE || 'databricks_postgres',
+    pgUser:
+      process.env.LAKEBASE_PG_USER || 'ankit.yadav@databricks.com',
+    pgPort: parseInt(process.env.LAKEBASE_PG_PORT || '5432', 10),
   },
 
   chat: {
@@ -96,7 +102,7 @@ export function logConfig() {
   console.log(`  Environment: ${isDatabricksApp ? 'Databricks App' : 'Standalone'}`)
   console.log(`  Databricks Host: ${config.databricks.instanceUrl}`)
   console.log(`  Chat Endpoint: ${config.databricks.chatEndpoint}`)
-  console.log(`  Lakebase REST URL: ${config.lakebase.restUrl ? 'Configured' : 'Not set'}`)
+  console.log(`  Lakebase PG Host: ${config.lakebase.pgHost || 'Not set'}`)
   console.log(`  Token Configured: ${config.databricks.token ? 'Yes' : 'No'}`)
   console.log(`  Port: ${config.server.port}`)
 }

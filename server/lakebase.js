@@ -1,39 +1,49 @@
 /**
- * Lakebase Data API routes
+ * Lakebase Postgres routes
  *
- * Proxies frontend requests to the Lakebase PostgREST-compatible Data API.
- * All routes require a valid Databricks OAuth token for authentication.
+ * Connects to Lakebase via Postgres wire protocol (pg driver).
+ * Uses the user's OAuth token as the Postgres password.
+ * This bypasses the Data API's PostgREST authenticator role chain.
  */
 
 import express from 'express'
+import pg from 'pg'
 import { config } from './config.js'
 
+const { Pool } = pg
 const router = express.Router()
-const LAKEBASE_URL = config.lakebase.restUrl
 
 /**
- * Helper: call the Lakebase Data API
+ * Create a pg Pool that uses the user's OAuth token as the password.
+ * Lakebase Autoscaling accepts Databricks OAuth tokens as Postgres passwords.
+ * We create a shared pool with a dynamic password callback so the token
+ * is fetched fresh for each new connection.
  */
-async function lakebaseRequest(path, { token, method = 'GET', body, headers: extra = {} } = {}) {
-  const url = `${LAKEBASE_URL}${path}`
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    ...extra,
-  }
+let currentToken = ''
 
-  const opts = { method, headers }
-  if (body) opts.body = JSON.stringify(body)
+const pool = new Pool({
+  host: config.lakebase.pgHost,
+  port: config.lakebase.pgPort,
+  database: config.lakebase.pgDatabase,
+  user: config.lakebase.pgUser,
+  password: () => currentToken,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+})
 
-  const res = await fetch(url, opts)
-  if (!res.ok) {
-    const text = await res.text()
-    const err = new Error(`Lakebase API error ${res.status}: ${text}`)
-    err.status = res.status
-    throw err
-  }
-  return res.json()
+pool.on('error', (err) => {
+  console.error('Unexpected Lakebase pool error:', err.message)
+})
+
+/**
+ * Helper: run a query using the pool with the user's token
+ */
+async function query(token, text, params = []) {
+  currentToken = token
+  const result = await pool.query(text, params)
+  return result.rows
 }
 
 // -------------------------------------------------------------------
@@ -43,47 +53,59 @@ async function lakebaseRequest(path, { token, method = 'GET', body, headers: ext
 /**
  * GET /api/use-cases
  * Query params: stage, service, date, search
- * Returns use cases joined with account name and owner name
  */
 router.get('/use-cases', async (req, res) => {
   try {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    // Build query params for PostgREST
-    // Select use_cases with embedded account name and owner name
-    const params = new URLSearchParams()
-    params.set('select', 'id,title,description,stage,value_cents,databricks_services,next_steps,stakeholders,created_at,updated_at,accounts(id,name),users(id,name)')
-    params.set('order', 'created_at.desc')
+    const conditions = []
+    const params = []
+    let paramIdx = 1
 
-    // Filters
     if (req.query.stage && req.query.stage !== 'all') {
-      params.append('stage', `eq.${req.query.stage}`)
+      conditions.push(`uc.stage = $${paramIdx++}`)
+      params.push(req.query.stage)
     }
     if (req.query.service && req.query.service !== 'all') {
-      params.append('databricks_services', `cs.{${req.query.service}}`)
+      conditions.push(`$${paramIdx++} = ANY(uc.databricks_services)`)
+      params.push(req.query.service)
     }
     if (req.query.search) {
-      // PostgREST full-text or ilike on title
-      params.append('or', `(title.ilike.*${req.query.search}*,description.ilike.*${req.query.search}*)`)
+      conditions.push(`(uc.title ILIKE $${paramIdx} OR uc.description ILIKE $${paramIdx})`)
+      params.push(`%${req.query.search}%`)
+      paramIdx++
     }
     if (req.query.date && req.query.date !== 'all') {
       const daysMap = { '7d': 7, '30d': 30, '90d': 90, '1y': 365 }
       const days = daysMap[req.query.date]
       if (days) {
-        const cutoff = new Date(Date.now() - days * 86400000).toISOString()
-        params.append('created_at', `gte.${cutoff}`)
+        conditions.push(`uc.created_at >= NOW() - INTERVAL '${days} days'`)
       }
     }
 
-    const data = await lakebaseRequest(`/public/use_cases?${params.toString()}`, { token })
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
-    // Transform to frontend shape
-    const useCases = data.map(transformUseCase)
+    const sql = `
+      SELECT
+        uc.id, uc.title, uc.description, uc.stage, uc.value_cents,
+        uc.databricks_services, uc.next_steps, uc.stakeholders,
+        uc.created_at, uc.updated_at,
+        a.id AS account_id, a.name AS account_name,
+        u.id AS owner_id, u.name AS owner_name
+      FROM use_cases uc
+      LEFT JOIN accounts a ON uc.account_id = a.id
+      LEFT JOIN users u ON uc.owner_id = u.id
+      ${where}
+      ORDER BY uc.created_at DESC
+    `
+
+    const rows = await query(token, sql, params)
+    const useCases = rows.map(transformUseCase)
     res.json(useCases)
   } catch (error) {
     console.error('GET /api/use-cases error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -95,65 +117,95 @@ router.get('/use-cases/:id', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const params = new URLSearchParams()
-    params.set('select', 'id,title,description,stage,value_cents,databricks_services,next_steps,stakeholders,created_at,updated_at,accounts(id,name),users(id,name)')
-    params.set('id', `eq.${req.params.id}`)
+    const sql = `
+      SELECT
+        uc.id, uc.title, uc.description, uc.stage, uc.value_cents,
+        uc.databricks_services, uc.next_steps, uc.stakeholders,
+        uc.created_at, uc.updated_at,
+        a.id AS account_id, a.name AS account_name,
+        u.id AS owner_id, u.name AS owner_name
+      FROM use_cases uc
+      LEFT JOIN accounts a ON uc.account_id = a.id
+      LEFT JOIN users u ON uc.owner_id = u.id
+      WHERE uc.id = $1
+    `
 
-    const data = await lakebaseRequest(`/public/use_cases?${params.toString()}`, {
-      token,
-      headers: { Accept: 'application/vnd.pgrst.object+json' },
-    })
-
-    res.json(transformUseCase(data))
+    const rows = await query(token, sql, [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ error: 'Not found' })
+    res.json(transformUseCase(rows[0]))
   } catch (error) {
     console.error('GET /api/use-cases/:id error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
 /**
  * POST /api/use-cases
- * Create a new use case
  */
 router.post('/use-cases', async (req, res) => {
   try {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const data = await lakebaseRequest('/public/use_cases', {
-      token,
-      method: 'POST',
-      body: req.body,
-      headers: { Prefer: 'return=representation' },
-    })
+    const {
+      title, description, account_id, owner_id, stage,
+      value_cents, databricks_services, next_steps, stakeholders,
+    } = req.body
 
-    res.status(201).json(data)
+    const sql = `
+      INSERT INTO use_cases (title, description, account_id, owner_id, stage, value_cents, databricks_services, next_steps, stakeholders)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `
+
+    const rows = await query(token, sql, [
+      title, description, account_id, owner_id, stage || 'validating',
+      value_cents || 0, databricks_services || [], next_steps || [], stakeholders || [],
+    ])
+
+    res.status(201).json(rows[0])
   } catch (error) {
     console.error('POST /api/use-cases error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
 /**
  * PATCH /api/use-cases/:id
- * Update a use case (e.g. stage transition)
  */
 router.patch('/use-cases/:id', async (req, res) => {
   try {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const data = await lakebaseRequest(`/public/use_cases?id=eq.${req.params.id}`, {
-      token,
-      method: 'PATCH',
-      body: req.body,
-      headers: { Prefer: 'return=representation' },
-    })
+    // Build SET clause dynamically from provided fields
+    const allowed = [
+      'title', 'description', 'stage', 'value_cents',
+      'databricks_services', 'next_steps', 'stakeholders',
+      'account_id', 'owner_id',
+    ]
+    const sets = []
+    const params = []
+    let idx = 1
 
-    res.json(data)
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        sets.push(`${field} = $${idx++}`)
+        params.push(req.body[field])
+      }
+    }
+
+    if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' })
+
+    sets.push(`updated_at = NOW()`)
+    params.push(req.params.id)
+
+    const sql = `UPDATE use_cases SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`
+    const rows = await query(token, sql, params)
+    res.json(rows[0])
   } catch (error) {
     console.error('PATCH /api/use-cases/:id error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -166,11 +218,11 @@ router.get('/accounts', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const data = await lakebaseRequest('/public/accounts?order=name.asc', { token })
-    res.json(data)
+    const rows = await query(token, 'SELECT * FROM accounts ORDER BY name ASC')
+    res.json(rows)
   } catch (error) {
     console.error('GET /api/accounts error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -183,17 +235,40 @@ router.get('/meeting-notes', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const params = new URLSearchParams()
-    params.set('select', 'id,filename,summary,attendees,uploaded_at,accounts(id,name),extracted_use_cases(id,title,description,suggested_stage,next_steps,linked_use_case_id)')
-    params.set('order', 'uploaded_at.desc')
+    const sql = `
+      SELECT
+        mn.id, mn.filename, mn.summary, mn.attendees, mn.uploaded_at,
+        a.id AS account_id, a.name AS account_name
+      FROM meeting_notes mn
+      LEFT JOIN accounts a ON mn.account_id = a.id
+      ORDER BY mn.uploaded_at DESC
+    `
 
-    const data = await lakebaseRequest(`/public/meeting_notes?${params.toString()}`, { token })
+    const noteRows = await query(token, sql)
 
-    const notes = data.map(transformMeetingNote)
+    // Fetch extracted use cases for all meeting notes
+    const noteIds = noteRows.map((n) => n.id)
+    let eucRows = []
+    if (noteIds.length > 0) {
+      eucRows = await query(
+        token,
+        `SELECT * FROM extracted_use_cases WHERE meeting_note_id = ANY($1) ORDER BY created_at`,
+        [noteIds]
+      )
+    }
+
+    // Group extracted use cases by meeting_note_id
+    const eucByNote = {}
+    for (const euc of eucRows) {
+      if (!eucByNote[euc.meeting_note_id]) eucByNote[euc.meeting_note_id] = []
+      eucByNote[euc.meeting_note_id].push(euc)
+    }
+
+    const notes = noteRows.map((row) => transformMeetingNote(row, eucByNote[row.id] || []))
     res.json(notes)
   } catch (error) {
     console.error('GET /api/meeting-notes error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -202,17 +277,19 @@ router.post('/meeting-notes', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const data = await lakebaseRequest('/public/meeting_notes', {
-      token,
-      method: 'POST',
-      body: req.body,
-      headers: { Prefer: 'return=representation' },
-    })
+    const { filename, account_id, summary, attendees } = req.body
 
-    res.status(201).json(data)
+    const sql = `
+      INSERT INTO meeting_notes (filename, account_id, summary, attendees)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `
+
+    const rows = await query(token, sql, [filename, account_id, summary, attendees || []])
+    res.status(201).json(rows[0])
   } catch (error) {
     console.error('POST /api/meeting-notes error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -225,17 +302,22 @@ router.post('/extracted-use-cases', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const data = await lakebaseRequest('/public/extracted_use_cases', {
-      token,
-      method: 'POST',
-      body: req.body,
-      headers: { Prefer: 'return=representation' },
-    })
+    const { meeting_note_id, title, description, suggested_stage, next_steps, linked_use_case_id } = req.body
 
-    res.status(201).json(data)
+    const sql = `
+      INSERT INTO extracted_use_cases (meeting_note_id, title, description, suggested_stage, next_steps, linked_use_case_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `
+
+    const rows = await query(token, sql, [
+      meeting_note_id, title, description, suggested_stage, next_steps || [], linked_use_case_id || null,
+    ])
+
+    res.status(201).json(rows[0])
   } catch (error) {
     console.error('POST /api/extracted-use-cases error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -248,17 +330,33 @@ router.get('/activities', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const limit = req.query.limit || 10
-    const params = new URLSearchParams()
-    params.set('select', 'id,type,description,created_at,accounts(id,name)')
-    params.set('order', 'created_at.desc')
-    params.set('limit', String(limit))
+    const limit = parseInt(req.query.limit, 10) || 10
 
-    const data = await lakebaseRequest(`/public/activities?${params.toString()}`, { token })
-    res.json(data)
+    const sql = `
+      SELECT
+        act.id, act.type, act.description, act.created_at,
+        a.id AS account_id, a.name AS account_name
+      FROM activities act
+      LEFT JOIN accounts a ON act.account_id = a.id
+      ORDER BY act.created_at DESC
+      LIMIT $1
+    `
+
+    const rows = await query(token, sql, [limit])
+
+    // Shape to match what the frontend expects (nested accounts object)
+    const activities = rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      description: row.description,
+      created_at: row.created_at,
+      accounts: row.account_id ? { id: row.account_id, name: row.account_name } : null,
+    }))
+
+    res.json(activities)
   } catch (error) {
     console.error('GET /api/activities error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -267,17 +365,22 @@ router.post('/activities', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const data = await lakebaseRequest('/public/activities', {
-      token,
-      method: 'POST',
-      body: req.body,
-      headers: { Prefer: 'return=representation' },
-    })
+    const { type, description, account_id, use_case_id, meeting_note_id } = req.body
 
-    res.status(201).json(data)
+    const sql = `
+      INSERT INTO activities (type, description, account_id, use_case_id, meeting_note_id)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `
+
+    const rows = await query(token, sql, [
+      type, description, account_id || null, use_case_id || null, meeting_note_id || null,
+    ])
+
+    res.status(201).json(rows[0])
   } catch (error) {
     console.error('POST /api/activities error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -290,41 +393,34 @@ router.get('/stats', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    // Fetch counts in parallel
-    const [useCases, accounts, meetingNotes] = await Promise.all([
-      lakebaseRequest('/public/use_cases?select=id,stage', { token }),
-      lakebaseRequest('/public/accounts?select=id', { token }),
-      lakebaseRequest('/public/meeting_notes?select=id,uploaded_at', { token }),
+    // Run aggregation queries in parallel
+    const [stageRows, accountRows, meetingRows] = await Promise.all([
+      query(token, 'SELECT stage, COUNT(*)::int AS count FROM use_cases GROUP BY stage'),
+      query(token, 'SELECT COUNT(*)::int AS count FROM accounts'),
+      query(token, `SELECT COUNT(*)::int AS count FROM meeting_notes WHERE uploaded_at >= date_trunc('month', CURRENT_DATE)`),
     ])
 
-    // Stage counts
+    // Build stage counts
     const stageCounts = {}
-    for (const uc of useCases) {
-      stageCounts[uc.stage] = (stageCounts[uc.stage] || 0) + 1
+    let totalUseCases = 0
+    for (const row of stageRows) {
+      stageCounts[row.stage] = row.count
+      totalUseCases += row.count
     }
 
-    // Meeting notes this month
-    const now = new Date()
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-    const meetingsThisMonth = meetingNotes.filter(
-      (mn) => mn.uploaded_at >= thisMonth
-    ).length
-
-    // Live use cases = conversion rate
     const liveCount = stageCounts['live'] || 0
-    const totalUseCases = useCases.length
     const conversionRate = totalUseCases > 0 ? Math.round((liveCount / totalUseCases) * 100) : 0
 
     res.json({
       totalUseCases,
-      totalAccounts: accounts.length,
-      meetingsThisMonth,
+      totalAccounts: accountRows[0]?.count || 0,
+      meetingsThisMonth: meetingRows[0]?.count || 0,
       conversionRate,
       stageCounts,
     })
   } catch (error) {
     console.error('GET /api/stats error:', error.message)
-    res.status(error.status || 500).json({ error: error.message })
+    res.status(500).json({ error: error.message })
   }
 })
 
@@ -344,10 +440,10 @@ function transformUseCase(row) {
     id: row.id,
     title: row.title,
     description: row.description || '',
-    account: row.accounts?.name || '',
-    accountId: row.accounts?.id || '',
-    owner: row.users?.name || '',
-    ownerId: row.users?.id || '',
+    account: row.account_name || '',
+    accountId: row.account_id,
+    owner: row.owner_name || '',
+    ownerId: row.owner_id,
     stage: row.stage,
     value: formatValue(row.value_cents),
     valueCents: row.value_cents,
@@ -359,12 +455,12 @@ function transformUseCase(row) {
   }
 }
 
-function transformMeetingNote(row) {
+function transformMeetingNote(row, extractedUseCases) {
   return {
     id: row.id,
     filename: row.filename,
-    account: row.accounts?.name || '',
-    accountId: row.accounts?.id || '',
+    account: row.account_name || '',
+    accountId: row.account_id,
     summary: row.summary || '',
     attendees: row.attendees || [],
     uploadDate: new Date(row.uploaded_at).toLocaleDateString('en-US', {
@@ -373,7 +469,7 @@ function transformMeetingNote(row) {
       year: 'numeric',
     }),
     uploadedAt: row.uploaded_at,
-    extractedUseCases: (row.extracted_use_cases || []).map((euc) => ({
+    extractedUseCases: extractedUseCases.map((euc) => ({
       id: euc.id,
       title: euc.title,
       description: euc.description || '',
