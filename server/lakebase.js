@@ -10,41 +10,51 @@ import express from 'express'
 import pg from 'pg'
 import { config } from './config.js'
 
-const { Pool } = pg
 const router = express.Router()
 
 /**
- * Create a pg Pool that uses the user's OAuth token as the password.
+ * Helper: run a query by creating a fresh pg.Client with the user's OAuth token.
+ * Each request gets its own connection to avoid token/session conflicts.
  * Lakebase Autoscaling accepts Databricks OAuth tokens as Postgres passwords.
- * We create a shared pool with a dynamic password callback so the token
- * is fetched fresh for each new connection.
- */
-let currentToken = ''
-
-const pool = new Pool({
-  host: config.lakebase.pgHost,
-  port: config.lakebase.pgPort,
-  database: config.lakebase.pgDatabase,
-  user: config.lakebase.pgUser,
-  password: () => currentToken,
-  ssl: { rejectUnauthorized: false },
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-})
-
-pool.on('error', (err) => {
-  console.error('Unexpected Lakebase pool error:', err.message)
-})
-
-/**
- * Helper: run a query using the pool with the user's token
  */
 async function query(token, text, params = []) {
-  currentToken = token
-  const result = await pool.query(text, params)
-  return result.rows
+  const client = new pg.Client({
+    host: config.lakebase.pgHost,
+    port: config.lakebase.pgPort,
+    database: config.lakebase.pgDatabase,
+    user: config.lakebase.pgUser,
+    password: token,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 15000,
+  })
+
+  try {
+    await client.connect()
+    const result = await client.query(text, params)
+    return result.rows
+  } finally {
+    await client.end().catch((err) => {
+      console.error('Error closing Lakebase client:', err.message)
+    })
+  }
 }
+
+// -------------------------------------------------------------------
+// DIAGNOSTICS
+// -------------------------------------------------------------------
+
+router.get('/lakebase-health', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'No token', hint: 'x-forwarded-access-token header missing' })
+
+    const rows = await query(token, 'SELECT current_user AS pg_user, current_database() AS db, COUNT(*)::int AS use_case_count FROM use_cases')
+    res.json({ status: 'connected', pgUser: rows[0].pg_user, database: rows[0].db, useCaseCount: rows[0].use_case_count })
+  } catch (error) {
+    console.error('Lakebase health check failed:', error.message)
+    res.status(500).json({ status: 'error', error: error.message })
+  }
+})
 
 // -------------------------------------------------------------------
 // USE CASES
@@ -57,7 +67,11 @@ async function query(token, text, params = []) {
 router.get('/use-cases', async (req, res) => {
   try {
     const token = req.userToken
-    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+    if (!token) {
+      console.error('GET /api/use-cases: No user token found in request')
+      return res.status(401).json({ error: 'Not authenticated' })
+    }
+    console.log(`GET /api/use-cases: token present (${token.substring(0, 8)}...), filters:`, req.query)
 
     const conditions = []
     const params = []
@@ -101,10 +115,11 @@ router.get('/use-cases', async (req, res) => {
     `
 
     const rows = await query(token, sql, params)
+    console.log(`GET /api/use-cases: query returned ${rows.length} rows`)
     const useCases = rows.map(transformUseCase)
     res.json(useCases)
   } catch (error) {
-    console.error('GET /api/use-cases error:', error.message)
+    console.error('GET /api/use-cases error:', error.message, error.stack)
     res.status(500).json({ error: error.message })
   }
 })
@@ -419,7 +434,7 @@ router.get('/stats', async (req, res) => {
       stageCounts,
     })
   } catch (error) {
-    console.error('GET /api/stats error:', error.message)
+    console.error('GET /api/stats error:', error.message, error.stack)
     res.status(500).json({ error: error.message })
   }
 })
