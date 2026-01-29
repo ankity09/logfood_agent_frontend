@@ -514,9 +514,15 @@ app.post('/api/extract-use-cases', async (req, res) => {
 
 Your task is to analyze the meeting notes and extract:
 1. A brief summary of the meeting (2-3 sentences)
-2. List of attendees mentioned
-3. The account/company name if mentioned
+2. List of attendees mentioned (names of people in the meeting)
+3. The PRIMARY account/company being discussed - this is the PROSPECT or CUSTOMER the meeting is about, NOT reference customers or case studies mentioned as examples
 4. Any potential use cases or opportunities discussed
+
+IMPORTANT for account identification:
+- Identify the PRIMARY account - the prospect or customer the sales team is trying to sell to or help
+- Do NOT use reference customers, case studies, or example companies mentioned during the discussion
+- If the meeting is about "exploring opportunities at Company X" or "account planning for Company X", then Company X is the account
+- If "Company Y" is mentioned as a "reference customer" or "similar customer", Company Y is NOT the primary account
 
 For each use case, extract:
 - title: A concise title for the use case
@@ -528,7 +534,7 @@ Respond ONLY with valid JSON in this exact format (no markdown, no code blocks, 
 {
   "summary": "Brief meeting summary",
   "attendees": ["Person 1", "Person 2"],
-  "account": "Company Name or null if not mentioned",
+  "account": "Primary Company Name or null if not mentioned",
   "useCases": [
     {
       "title": "Use Case Title",

@@ -219,6 +219,23 @@ async function fetchAccounts(): Promise<Array<{ id: string; name: string }>> {
   return res.json()
 }
 
+/**
+ * Create a new account
+ */
+async function createAccount(name: string): Promise<{ id: string; name: string }> {
+  const url = `${databricksConfig.api.baseUrl}${databricksConfig.api.accountsEndpoint}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}))
+    throw new Error(errBody.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export function MeetingNotesPage() {
   const [notes, setNotes] = useState<MeetingNote[]>([])
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([])
@@ -316,10 +333,11 @@ export function MeetingNotesPage() {
 
       setProcessingStatus('Saving to database...')
 
-      // Step 3: Find matching account if mentioned
+      // Step 3: Find or create matching account
       let accountId: string | null = null
       let accountName = extracted.account || 'Unknown Account'
       if (extracted.account) {
+        // Try to find an existing account
         const matchedAccount = accounts.find(
           (a) => a.name.toLowerCase().includes(extracted.account!.toLowerCase()) ||
                  extracted.account!.toLowerCase().includes(a.name.toLowerCase())
@@ -327,6 +345,33 @@ export function MeetingNotesPage() {
         if (matchedAccount) {
           accountId = matchedAccount.id
           accountName = matchedAccount.name
+        } else {
+          // Create a new account if not found
+          try {
+            setProcessingStatus('Creating new account...')
+            const newAccount = await createAccount(extracted.account)
+            accountId = newAccount.id
+            accountName = newAccount.name
+            // Update local accounts list
+            setAccounts((prev) => [...prev, newAccount])
+          } catch (err) {
+            console.error('Failed to create account:', err)
+            // Fall through - will try with null which may fail
+          }
+        }
+      }
+
+      // If still no account, create "Unknown Account" as fallback
+      if (!accountId) {
+        try {
+          setProcessingStatus('Creating fallback account...')
+          const fallbackAccount = await createAccount(accountName)
+          accountId = fallbackAccount.id
+          accountName = fallbackAccount.name
+          setAccounts((prev) => [...prev, fallbackAccount])
+        } catch (err) {
+          console.error('Failed to create fallback account:', err)
+          throw new Error('Unable to save meeting note: no account could be created')
         }
       }
 

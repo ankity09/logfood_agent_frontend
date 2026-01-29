@@ -223,6 +223,43 @@ router.get('/accounts', async (req, res) => {
   }
 })
 
+router.post('/accounts', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const { name, industry } = req.body
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Account name is required' })
+    }
+
+    const sql = `
+      INSERT INTO accounts (name, industry)
+      VALUES ($1, $2)
+      RETURNING *
+    `
+
+    const rows = await query(token, sql, [name.trim(), industry || null])
+    res.status(201).json(rows[0])
+  } catch (error) {
+    // Handle duplicate account name gracefully
+    if (error.message.includes('unique constraint') || error.message.includes('duplicate key')) {
+      // Try to return the existing account
+      try {
+        const existing = await query(req.userToken, 'SELECT * FROM accounts WHERE LOWER(name) = LOWER($1)', [req.body.name.trim()])
+        if (existing.length > 0) {
+          return res.json(existing[0])
+        }
+      } catch (e) {
+        // Ignore and return original error
+      }
+    }
+    console.error('POST /api/accounts error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // -------------------------------------------------------------------
 // MEETING NOTES
 // -------------------------------------------------------------------
