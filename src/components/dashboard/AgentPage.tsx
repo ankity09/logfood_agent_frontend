@@ -204,8 +204,8 @@ export function AgentPage() {
       {/* Page Header */}
       <motion.div variants={itemVariants} className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">AI Agent</h1>
-          <p className="text-gray-400 mt-1">Your intelligent assistant for account management.</p>
+          <h1 className="text-3xl font-bold text-theme-primary">AI Agent</h1>
+          <p className="text-theme-secondary mt-1">Your intelligent assistant for account management.</p>
         </div>
         <button onClick={clearChat} className="btn-ghost text-sm">
           Clear Chat
@@ -234,7 +234,7 @@ export function AgentPage() {
                     ? 'bg-gradient-to-br from-primary/20 to-neon-blue/20 text-primary'
                     : message.role === 'error'
                       ? 'bg-red-500/20 text-red-500'
-                      : 'bg-dark-50 text-gray-400'
+                      : 'bg-theme-elevated text-theme-secondary'
                 }`}
               >
                 {message.role === 'assistant' ? (
@@ -249,7 +249,7 @@ export function AgentPage() {
                 <div
                   className={`px-5 py-4 rounded-2xl ${
                     message.role === 'assistant'
-                      ? 'bg-dark-50 text-gray-100 rounded-tl-sm'
+                      ? 'bg-theme-elevated text-theme-primary rounded-tl-sm'
                       : message.role === 'error'
                         ? 'bg-red-500/10 text-red-300 rounded-tl-sm border border-red-500/20'
                         : 'bg-gradient-to-r from-primary to-neon-blue text-dark rounded-tr-sm'
@@ -260,7 +260,7 @@ export function AgentPage() {
                 {message.attachments && message.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {message.attachments.map((att, i) => (
-                      <span key={i} className="text-xs bg-dark-50 text-gray-400 px-2 py-1 rounded-lg flex items-center gap-1">
+                      <span key={i} className="text-xs bg-theme-elevated text-theme-secondary px-2 py-1 rounded-lg flex items-center gap-1">
                         <FileText className="w-3 h-3" />
                         {att.name}
                       </span>
@@ -268,7 +268,7 @@ export function AgentPage() {
                   </div>
                 )}
                 <p className={`text-xs ${
-                  message.role === 'user' ? 'text-right text-gray-500' : message.role === 'error' ? 'text-red-400/60' : 'text-gray-500'
+                  message.role === 'user' ? 'text-right text-theme-muted' : message.role === 'error' ? 'text-red-400/60' : 'text-theme-muted'
                 }`}>
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
@@ -286,11 +286,11 @@ export function AgentPage() {
               <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-neon-blue/20 flex items-center justify-center text-primary">
                 <Bot className="w-5 h-5" />
               </div>
-              <div className="bg-dark-50 px-5 py-4 rounded-2xl rounded-tl-sm">
+              <div className="bg-theme-elevated px-5 py-4 rounded-2xl rounded-tl-sm">
                 <div className="flex gap-1.5">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.1s]" />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                  <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" />
+                  <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:0.1s]" />
+                  <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:0.2s]" />
                 </div>
               </div>
             </motion.div>
@@ -310,7 +310,7 @@ export function AgentPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleSuggestedPrompt(prompt)}
-                  className="text-left p-4 rounded-xl border border-white/10 hover:border-primary/30 hover:bg-primary/5 text-sm text-gray-300 transition-all"
+                  className="text-left p-4 rounded-xl border border-theme hover:border-primary/30 hover:bg-primary/5 text-sm text-theme-secondary transition-all"
                 >
                   <Sparkles className="w-4 h-4 text-primary mb-2" />
                   {prompt}
@@ -324,12 +324,12 @@ export function AgentPage() {
 
         {/* Attachments preview */}
         {attachments.length > 0 && (
-          <div className="px-6 py-2 border-t border-white/5 flex flex-wrap gap-2">
+          <div className="px-6 py-2 border-t border-theme flex flex-wrap gap-2">
             {attachments.map((att, i) => (
-              <span key={i} className="text-xs bg-dark-50 text-gray-300 px-3 py-1.5 rounded-lg flex items-center gap-2">
+              <span key={i} className="text-xs bg-theme-elevated text-theme-secondary px-3 py-1.5 rounded-lg flex items-center gap-2">
                 <FileText className="w-3 h-3" />
                 {att.name}
-                <button onClick={() => removeAttachment(i)} className="text-gray-500 hover:text-white">
+                <button onClick={() => removeAttachment(i)} className="text-theme-muted hover:text-theme-primary">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -338,7 +338,7 @@ export function AgentPage() {
         )}
 
         {/* Input Area */}
-        <div className="p-4 border-t border-white/5 bg-dark-100/50">
+        <div className="p-4 border-t border-theme bg-theme-card/50">
           <div className="flex items-end gap-3">
             {/* Action buttons */}
             <div className="flex gap-1 pb-1">
@@ -351,19 +351,19 @@ export function AgentPage() {
               />
               <button
                 onClick={handleFileAttach}
-                className="p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                className="p-2.5 text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle rounded-lg transition-colors"
                 title="Attach file"
               >
                 <Paperclip className="w-5 h-5" />
               </button>
               <button
-                className="p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                className="p-2.5 text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle rounded-lg transition-colors"
                 title="Upload image"
               >
                 <Image className="w-5 h-5" />
               </button>
               <button
-                className="p-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                className="p-2.5 text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle rounded-lg transition-colors"
                 title="Voice input"
               >
                 <Mic className="w-5 h-5" />
@@ -399,7 +399,7 @@ export function AgentPage() {
               <Send className="w-5 h-5" />
             </motion.button>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center">
+          <p className="text-xs text-theme-muted mt-2 text-center">
             {databricksConfig.ui.chatbot.subtitle}
           </p>
         </div>
