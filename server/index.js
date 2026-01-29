@@ -238,10 +238,10 @@ app.post('/api/chat', async (req, res) => {
     const userInput = lastUserMessage?.content || ''
 
     // Build the request payload for the agent endpoint
-    // Agent expects: input (array), max_output_tokens, temperature, context
+    // Agent expects: input (Array), max_output_tokens, temperature, context
     // Use higher token limit for deep research agent
     const agentPayload = {
-      input: userInput,
+      input: [userInput],  // Must be an array
       max_output_tokens: config.chat.agentMaxTokens,
       temperature: config.chat.temperature,
       context: {
@@ -358,7 +358,7 @@ app.post('/api/chat/stream', async (req, res) => {
     // Build the request payload for the agent endpoint
     // Use higher token limit for deep research agent
     const agentPayload = {
-      input: userInput,
+      input: [userInput],  // Must be an array
       max_output_tokens: config.chat.agentMaxTokens,
       temperature: config.chat.temperature,
       stream: true,
