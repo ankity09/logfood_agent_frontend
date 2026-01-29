@@ -233,15 +233,11 @@ app.post('/api/chat', async (req, res) => {
     // Use the multi-agent endpoint for chat (has Genie tables and deep research)
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
 
-    // Get the last user message as input for the agent
-    const lastUserMessage = messages.filter(m => m.role === 'user').pop()
-    const userInput = lastUserMessage?.content || ''
-
     // Build the request payload for the agent endpoint
-    // Agent expects: input (Array), max_output_tokens, temperature, context
+    // Agent expects: input as Array of Message objects with {role, content}
     // Use higher token limit for deep research agent
     const agentPayload = {
-      input: [userInput],  // Must be an array
+      input: messages.map(m => ({ role: m.role, content: m.content })),
       max_output_tokens: config.chat.agentMaxTokens,
       temperature: config.chat.temperature,
       context: {
@@ -351,14 +347,11 @@ app.post('/api/chat/stream', async (req, res) => {
     // Use the multi-agent endpoint for streaming chat (has Genie tables and deep research)
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
 
-    // Get the last user message as input for the agent
-    const lastUserMessage = messages.filter(m => m.role === 'user').pop()
-    const userInput = lastUserMessage?.content || ''
-
     // Build the request payload for the agent endpoint
+    // Agent expects: input as Array of Message objects with {role, content}
     // Use higher token limit for deep research agent
     const agentPayload = {
-      input: [userInput],  // Must be an array
+      input: messages.map(m => ({ role: m.role, content: m.content })),
       max_output_tokens: config.chat.agentMaxTokens,
       temperature: config.chat.temperature,
       stream: true,
