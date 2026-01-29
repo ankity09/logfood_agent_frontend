@@ -270,8 +270,32 @@ app.post('/api/chat', async (req, res) => {
       })
     }
 
-    const data = await response.json()
-    console.log(`Agent response type:`, typeof data, Array.isArray(data) ? `array[${data.length}]` : 'object')
+    let data = await response.json()
+    console.log(`Agent response type (initial):`, typeof data, Array.isArray(data) ? `array[${data.length}]` : 'object')
+
+    // Handle case where the response is a JSON string that needs to be parsed
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data)
+        console.log(`Parsed string response, now type:`, typeof data, Array.isArray(data) ? `array[${data.length}]` : 'object')
+      } catch (e) {
+        console.log(`Could not parse string response as JSON`)
+      }
+    }
+
+    // Handle case where the array is wrapped in an object (e.g., { output: [...] })
+    if (!Array.isArray(data) && data && typeof data === 'object') {
+      if (Array.isArray(data.output)) {
+        data = data.output
+        console.log(`Extracted array from data.output, length:`, data.length)
+      } else if (Array.isArray(data.messages)) {
+        data = data.messages
+        console.log(`Extracted array from data.messages, length:`, data.length)
+      } else if (Array.isArray(data.result)) {
+        data = data.result
+        console.log(`Extracted array from data.result, length:`, data.length)
+      }
+    }
 
     // Extract the assistant's message from the response
     // Handle the multi-agent response format which returns an array of messages/tool calls
@@ -326,9 +350,45 @@ app.post('/api/chat', async (req, res) => {
         : JSON.stringify(data.predictions[0])
     } else if (typeof data === 'string') {
       assistantMessage = data
+    } else {
+      // Fallback: log the structure we couldn't parse
+      console.log(`Could not extract message from response structure:`, JSON.stringify(data).substring(0, 500))
+      // If it's an array we couldn't parse, try a last-ditch effort
+      if (Array.isArray(data) && data.length > 0) {
+        // Try to find any text content in any message
+        for (let i = data.length - 1; i >= 0; i--) {
+          const item = data[i]
+          if (item.content && Array.isArray(item.content)) {
+            const text = item.content.find(c => c.text)?.text
+            if (text) {
+              assistantMessage = text
+              console.log(`Fallback: extracted text from item ${i}, length: ${text.length}`)
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // Final sanity check - make sure we're not returning raw JSON
+    if (assistantMessage.startsWith('[{') || assistantMessage.startsWith('{"')) {
+      console.log(`WARNING: assistantMessage looks like raw JSON, attempting re-extraction`)
+      try {
+        const parsed = JSON.parse(assistantMessage)
+        if (Array.isArray(parsed)) {
+          const lastMsg = parsed.filter(i => i.type === 'message' && i.role === 'assistant').pop()
+          if (lastMsg?.content?.[0]?.text) {
+            assistantMessage = lastMsg.content[0].text
+            console.log(`Re-extracted message, length: ${assistantMessage.length}`)
+          }
+        }
+      } catch (e) {
+        console.log(`Could not re-parse assistantMessage`)
+      }
     }
 
     console.log(`Chat response for user ${userEmail}, length: ${assistantMessage.length}`)
+    console.log(`Response preview: ${assistantMessage.substring(0, 100)}...`)
 
     res.json({
       message: assistantMessage,
