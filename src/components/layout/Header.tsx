@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, Sparkles } from 'lucide-react'
+import { Menu, X, Sparkles, Sun, Moon } from 'lucide-react'
+import { useTheme } from '../../context/ThemeContext'
 
 interface Tab {
   id: string
@@ -15,9 +16,34 @@ interface HeaderProps {
   onDocumentationClick?: () => void
 }
 
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+
+  return (
+    <button
+      onClick={toggleTheme}
+      className="theme-toggle"
+      aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+    >
+      <motion.div
+        className="theme-toggle-knob"
+        layout
+        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      >
+        {theme === 'dark' ? (
+          <Moon className="w-3.5 h-3.5 text-white" />
+        ) : (
+          <Sun className="w-3.5 h-3.5 text-white" />
+        )}
+      </motion.div>
+    </button>
+  )
+}
+
 export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const { theme } = useTheme()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -31,7 +57,9 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? 'bg-dark-100/80 backdrop-blur-xl border-b border-white/5'
+          ? theme === 'dark'
+            ? 'bg-dark-100/80 backdrop-blur-xl border-b border-white/5'
+            : 'bg-white/80 backdrop-blur-xl border-b border-black/5 shadow-sm'
           : 'bg-transparent'
       }`}
     >
@@ -49,21 +77,25 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
               </div>
               <div className="absolute -inset-1 rounded-xl bg-gradient-to-br from-primary to-neon-blue opacity-30 blur-lg -z-10" />
             </div>
-            <span className="text-xl font-bold text-white">
+            <span className="text-xl font-bold text-theme-primary">
               LogFood<span className="text-gradient">Agent</span>
             </span>
           </motion.div>
 
           {/* Desktop Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-dark-100/50 backdrop-blur-sm rounded-full px-2 py-1 border border-white/5">
+          <nav className={`hidden md:flex items-center gap-1 backdrop-blur-sm rounded-full px-2 py-1 border ${
+            theme === 'dark'
+              ? 'bg-dark-100/50 border-white/5'
+              : 'bg-white/50 border-black/5'
+          }`}>
             {tabs.map((tab) => (
               <motion.button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className={`relative px-4 py-2 text-sm font-medium rounded-full transition-colors duration-200 ${
                   activeTab === tab.id
-                    ? 'text-white'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'text-theme-primary'
+                    : 'text-theme-secondary hover:text-theme-primary'
                 }`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -91,21 +123,19 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
             >
               Documentation
             </button>
-            <button
-              className="btn-primary text-sm"
-              onClick={() => onTabChange('usecases')}
-            >
-              Get Started
-            </button>
+            <ThemeToggle />
           </div>
 
           {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 text-gray-400 hover:text-white transition-colors"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
+          <div className="md:hidden flex items-center gap-3">
+            <ThemeToggle />
+            <button
+              className="p-2 text-theme-secondary hover:text-theme-primary transition-colors"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -116,7 +146,11 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-dark-100/95 backdrop-blur-xl border-b border-white/5"
+            className={`md:hidden backdrop-blur-xl border-b ${
+              theme === 'dark'
+                ? 'bg-dark-100/95 border-white/5'
+                : 'bg-white/95 border-black/5'
+            }`}
           >
             <div className="px-4 py-4 space-y-2">
               {tabs.map((tab) => (
@@ -129,14 +163,14 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     activeTab === tab.id
                       ? 'bg-primary/10 text-primary'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-card'
                   }`}
                 >
                   {tab.icon}
                   {tab.label}
                 </button>
               ))}
-              <div className="pt-4 border-t border-white/10 space-y-2">
+              <div className="pt-4 border-t border-theme space-y-2">
                 <button
                   className="w-full btn-ghost text-left"
                   onClick={() => {
@@ -145,15 +179,6 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
                   }}
                 >
                   Documentation
-                </button>
-                <button
-                  className="w-full btn-primary"
-                  onClick={() => {
-                    onTabChange('usecases')
-                    setIsMobileMenuOpen(false)
-                  }}
-                >
-                  Get Started
                 </button>
               </div>
             </div>

@@ -2,14 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Custom Properties for theming */
+:root {
+  /* Dark mode (default) */
+  --color-bg: #0A0A0A;
+  --color-bg-elevated: #141414;
+  --color-bg-card: #1A1A1A;
+  --color-bg-hover: rgba(255, 255, 255, 0.05);
+  --color-border: rgba(255, 255, 255, 0.05);
+  --color-border-hover: rgba(255, 255, 255, 0.1);
+  --color-text-primary: #F9FAFB;
+  --color-text-secondary: #9CA3AF;
+  --color-text-muted: #6B7280;
+  --scrollbar-track: #141414;
+  --scrollbar-thumb: #1A1A1A;
+  --scrollbar-thumb-hover: #374151;
+}
+
+.light {
+  --color-bg: #F8FAFC;
+  --color-bg-elevated: #FFFFFF;
+  --color-bg-card: #FFFFFF;
+  --color-bg-hover: rgba(0, 0, 0, 0.03);
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-hover: rgba(0, 0, 0, 0.15);
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+  --scrollbar-track: #F1F5F9;
+  --scrollbar-thumb: #CBD5E1;
+  --scrollbar-thumb-hover: #94A3B8;
+}
+
 @layer base {
   * {
-    @apply border-dark-50;
+    border-color: var(--color-border);
   }
 
   body {
-    @apply bg-dark text-gray-100 font-sans;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    @apply font-sans;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   /* Custom scrollbar */
@@ -19,27 +54,41 @@
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-dark-100;
+    background: var(--scrollbar-track);
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-dark-50 rounded-full;
+    background: var(--scrollbar-thumb);
+    border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-700;
+    background: var(--scrollbar-thumb-hover);
   }
 
   /* Selection */
   ::selection {
-    @apply bg-primary/30 text-white;
+    @apply bg-primary/30;
+    color: var(--color-text-primary);
   }
 }
 
 @layer components {
-  /* Glass morphism card */
+  /* Glass morphism card - adapts to theme */
   .glass-card {
-    @apply bg-dark-100/50 backdrop-blur-xl border border-white/5 rounded-2xl;
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    @apply backdrop-blur-xl rounded-2xl;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+  }
+
+  .dark .glass-card {
+    background: rgba(20, 20, 20, 0.5);
+  }
+
+  .light .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
   }
 
   /* Glow border effect */
@@ -57,7 +106,7 @@
     @apply opacity-100;
   }
 
-  /* Neon text gradient */
+  /* Neon text gradient - works in both modes */
   .text-gradient {
     @apply bg-gradient-to-r from-primary via-neon-blue to-neon-purple bg-clip-text text-transparent;
   }
@@ -66,7 +115,7 @@
     @apply bg-gradient-to-r from-accent via-neon-orange to-neon-pink bg-clip-text text-transparent;
   }
 
-  /* Button styles */
+  /* Button styles - neon theme preserved */
   .btn-primary {
     @apply px-6 py-3 bg-primary text-dark font-semibold rounded-lg
            hover:bg-primary-400 transition-all duration-200
@@ -74,24 +123,40 @@
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-dark-50 text-white font-medium rounded-lg
-           border border-white/10 hover:border-white/20 hover:bg-dark-100
+    @apply px-6 py-3 font-medium rounded-lg
            transition-all duration-200 active:scale-[0.98];
+    background: var(--color-bg-card);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--color-border-hover);
+    background: var(--color-bg-hover);
   }
 
   .btn-ghost {
-    @apply px-4 py-2 text-gray-400 hover:text-white
-           hover:bg-white/5 rounded-lg transition-all duration-200;
+    @apply px-4 py-2 rounded-lg transition-all duration-200;
+    color: var(--color-text-secondary);
+  }
+
+  .btn-ghost:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-hover);
   }
 
   /* Tab styles */
   .tab {
-    @apply relative px-4 py-2 text-gray-400 hover:text-white
-           transition-colors duration-200 font-medium;
+    @apply relative px-4 py-2 transition-colors duration-200 font-medium;
+    color: var(--color-text-secondary);
+  }
+
+  .tab:hover {
+    color: var(--color-text-primary);
   }
 
   .tab.active {
-    @apply text-white;
+    color: var(--color-text-primary);
   }
 
   .tab.active::after {
@@ -101,10 +166,16 @@
 
   /* Input styles */
   .input {
-    @apply w-full px-4 py-3 bg-dark-100 border border-white/10 rounded-lg
-           text-white placeholder-gray-500
+    @apply w-full px-4 py-3 rounded-lg
            focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30
            transition-all duration-200;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+  }
+
+  .input::placeholder {
+    color: var(--color-text-muted);
   }
 
   /* Card hover effect */
@@ -114,8 +185,15 @@
 
   /* Dot grid background pattern */
   .dot-pattern {
-    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
     background-size: 24px 24px;
+  }
+
+  .dark .dot-pattern {
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  }
+
+  .light .dot-pattern {
+    background-image: radial-gradient(circle, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
   }
 
   /* Gradient mesh background */
@@ -125,6 +203,39 @@
       radial-gradient(at 100% 0%, rgba(0, 212, 255, 0.1) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.1) 0px, transparent 50%),
       radial-gradient(at 0% 100%, rgba(236, 72, 153, 0.05) 0px, transparent 50%);
+  }
+
+  .light .gradient-mesh {
+    background:
+      radial-gradient(at 0% 0%, rgba(0, 229, 153, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(0, 212, 255, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, rgba(236, 72, 153, 0.04) 0px, transparent 50%);
+  }
+
+  /* Theme toggle button */
+  .theme-toggle {
+    @apply relative w-14 h-7 rounded-full transition-all duration-300 cursor-pointer;
+  }
+
+  .dark .theme-toggle {
+    @apply bg-dark-50 border border-white/10;
+  }
+
+  .light .theme-toggle {
+    @apply bg-gray-200 border border-gray-300;
+  }
+
+  .theme-toggle-knob {
+    @apply absolute top-0.5 w-6 h-6 rounded-full transition-all duration-300 flex items-center justify-center;
+  }
+
+  .dark .theme-toggle-knob {
+    @apply left-0.5 bg-gradient-to-br from-neon-blue to-neon-purple;
+  }
+
+  .light .theme-toggle-knob {
+    @apply left-[calc(100%-1.625rem)] bg-gradient-to-br from-yellow-400 to-orange-500;
   }
 }
 
@@ -172,5 +283,36 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Theme-aware text colors */
+  .text-theme-primary {
+    color: var(--color-text-primary);
+  }
+
+  .text-theme-secondary {
+    color: var(--color-text-secondary);
+  }
+
+  .text-theme-muted {
+    color: var(--color-text-muted);
+  }
+
+  /* Theme-aware backgrounds */
+  .bg-theme {
+    background-color: var(--color-bg);
+  }
+
+  .bg-theme-elevated {
+    background-color: var(--color-bg-elevated);
+  }
+
+  .bg-theme-card {
+    background-color: var(--color-bg-card);
+  }
+
+  /* Theme-aware borders */
+  .border-theme {
+    border-color: var(--color-border);
   }
 }
