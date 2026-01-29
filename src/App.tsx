@@ -10,7 +10,7 @@ import { DocumentationPage } from './components/dashboard/DocumentationPage'
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-  { id: 'agent', label: 'Agent', icon: <Bot className="w-4 h-4" /> },
+  { id: 'agent', label: 'Research Agent', icon: <Bot className="w-4 h-4" /> },
   { id: 'usecases', label: 'Use Cases', icon: <Target className="w-4 h-4" /> },
   { id: 'meetingnotes', label: 'Meeting Notes', icon: <FileText className="w-4 h-4" /> },
   { id: 'documentation', label: 'Docs', icon: <BookOpen className="w-4 h-4" /> },

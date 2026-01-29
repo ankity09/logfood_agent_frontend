@@ -13,6 +13,8 @@ import {
   Image,
   FileText,
   X,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { databricksConfig } from '../../config'
 
@@ -65,9 +67,16 @@ export function AgentPage() {
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [attachments, setAttachments] = useState<{ name: string; type: string }[]>([])
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleCopyMessage = (messageId: string, content: string) => {
+    navigator.clipboard.writeText(content)
+    setCopiedMessageId(messageId)
+    setTimeout(() => setCopiedMessageId(null), 2000)
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -206,8 +215,8 @@ export function AgentPage() {
       {/* Page Header */}
       <motion.div variants={itemVariants} className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-theme-primary">AI Agent</h1>
-          <p className="text-theme-secondary mt-1">Your intelligent assistant for account management.</p>
+          <h1 className="text-3xl font-bold text-theme-primary">Research Agent</h1>
+          <p className="text-theme-secondary mt-1">Your intelligent assistant for deep account research and analysis.</p>
         </div>
         <button onClick={clearChat} className="btn-ghost text-sm">
           Clear Chat
@@ -249,7 +258,7 @@ export function AgentPage() {
               </div>
               <div className={`max-w-[70%] space-y-2`}>
                 <div
-                  className={`px-5 py-4 rounded-2xl ${
+                  className={`px-5 py-4 rounded-2xl relative group ${
                     message.role === 'assistant'
                       ? 'bg-theme-elevated text-theme-primary rounded-tl-sm'
                       : message.role === 'error'
@@ -257,8 +266,22 @@ export function AgentPage() {
                         : 'bg-gradient-to-r from-primary to-neon-blue text-dark rounded-tr-sm'
                   }`}
                 >
+                  {/* Copy button for assistant messages */}
+                  {message.role === 'assistant' && (
+                    <button
+                      onClick={() => handleCopyMessage(message.id, message.content)}
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-theme-subtle/50 text-theme-muted hover:text-theme-primary hover:bg-theme-subtle opacity-0 group-hover:opacity-100 transition-all"
+                      title="Copy message"
+                    >
+                      {copiedMessageId === message.id ? (
+                        <Check className="w-4 h-4 text-primary" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
                   {message.role === 'assistant' ? (
-                    <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none prose-headings:text-theme-primary prose-p:text-theme-primary prose-strong:text-theme-primary prose-li:text-theme-secondary prose-table:text-xs prose-th:text-theme-primary prose-td:text-theme-secondary prose-code:text-primary prose-code:bg-theme-subtle prose-code:px-1 prose-code:rounded">
+                    <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none prose-headings:text-theme-primary prose-p:text-theme-primary prose-strong:text-theme-primary prose-li:text-theme-secondary prose-table:text-xs prose-th:text-theme-primary prose-td:text-theme-secondary prose-code:text-primary prose-code:bg-theme-subtle prose-code:px-1 prose-code:rounded pr-8">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {message.content}
                       </ReactMarkdown>
