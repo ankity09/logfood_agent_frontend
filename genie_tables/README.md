@@ -1,16 +1,16 @@
 # Genie Space Tables
 
-This folder contains Jupyter notebooks for creating and populating tables in the Databricks Genie Space under catalog `ankit_yadav`.
+This folder contains Jupyter notebooks for creating and populating tables in the Databricks Genie Space under catalog `ankit_yadav.demo`.
 
 ## Tables
 
 | # | Notebook | Table | Description |
 |---|----------|-------|-------------|
-| 1 | `01_dim_accounts.ipynb` | `dim_accounts` | Account dimension with customer details and sales hierarchy |
-| 2 | `02_dim_use_cases.ipynb` | `dim_use_cases` | Use case dimension with progression stages |
-| 3 | `03_fact_consumption_daily.ipynb` | `fact_consumption_daily` | Daily grain consumption and revenue metrics |
-| 4 | `04_fact_consumption_weekly.ipynb` | `fact_consumption_weekly` | Weekly aggregated consumption (from daily) |
-| 5 | `05_fact_consumption_monthly.ipynb` | `fact_consumption_monthly` | Monthly aggregated consumption (from daily) |
+| 1 | `01_dim_accounts.ipynb` | `ankit_yadav.demo.dim_accounts` | Account dimension with customer details and sales hierarchy |
+| 2 | `02_dim_use_cases.ipynb` | `ankit_yadav.demo.dim_use_cases` | Use case dimension with progression stages |
+| 3 | `03_fact_consumption_daily.ipynb` | `ankit_yadav.demo.fact_consumption_daily` | Daily grain consumption and revenue metrics |
+| 4 | `04_fact_consumption_weekly.ipynb` | `ankit_yadav.demo.fact_consumption_weekly` | Weekly aggregated consumption (from daily) |
+| 5 | `05_fact_consumption_monthly.ipynb` | `ankit_yadav.demo.fact_consumption_monthly` | Monthly aggregated consumption (from daily) |
 
 ## Data Model
 
@@ -47,7 +47,7 @@ Run the notebooks in order:
 
 ## Demo Data Summary
 
-- **12 accounts** across 3 AEMs (Ron Berkovits, Josue Gonzalez, Nick Cary)
+- **12 accounts** across 3 AEMs (Marcus Chen, Elena Rodriguez, David Park)
 - **22 use cases** across 6 stages (Validating through Onboarding)
 - **90 days** of daily consumption data
 - **6 SKUs**: JOBS_COMPUTE, SQL_COMPUTE, ALL_PURPOSE_COMPUTE, MODEL_SERVING, DELTA_LIVE_TABLES
@@ -57,6 +57,51 @@ Run the notebooks in order:
 
 ```
 1-Validating → 2-Scoping → 3-Evaluating → 4-Confirming → 5-Onboarding → 6-Live
+```
+
+## Integration with Lakebase
+
+The Delta tables in `ankit_yadav.demo.*` serve as the **source of truth** for analytics and Genie queries. The Lakebase (Postgres) tables in `db/` power the app experience.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Delta Lake (Unity Catalog)                  │
+│                      ankit_yadav.demo.*                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐ │
+│  │ dim_accounts │  │dim_use_cases │  │ fact_consumption_*     │ │
+│  └──────────────┘  └──────────────┘  └────────────────────────┘ │
+│         │                  │                     │               │
+│         └──────────────────┴─────────────────────┘               │
+│                            │                                     │
+│                     Genie Space                                  │
+│                   (Analytics/NLQ)                                │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                      ┌──────▼──────┐
+                      │   Sync/ETL  │  (Future: read-only views)
+                      └──────┬──────┘
+                             │
+┌────────────────────────────▼────────────────────────────────────┐
+│                    Lakebase (Postgres)                          │
+│                    databricks_postgres                          │
+│  ┌──────────┐  ┌───────────┐  ┌─────────────┐  ┌────────────┐  │
+│  │ accounts │  │ use_cases │  │meeting_notes│  │ activities │  │
+│  └──────────┘  └───────────┘  └─────────────┘  └────────────┘  │
+│                            │                                     │
+│                     App Frontend                                 │
+│                   (React + Express)                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Future: Read-Only Views in Lakebase
+
+To sync Delta tables to Lakebase as read-only views:
+
+```sql
+-- Example: Create a foreign data wrapper or materialized view
+-- that syncs from Delta Lake to Lakebase for app consumption
 ```
 
 ## Sample Genie Questions
