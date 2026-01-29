@@ -1,8 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react'
-import { DatabricksDashboard } from '@databricks/aibi-client'
-import { databricksConfig, getDashboardConfig } from '../../config'
+import {
+  TrendingUp,
+  Users,
+  Target,
+  FileText,
+  Activity,
+  Calendar,
+  Loader2,
+} from 'lucide-react'
+import { StatCard, ChartCard } from '../ui/Card'
+import { databricksConfig } from '../../config'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -21,86 +29,149 @@ const itemVariants = {
   },
 }
 
-export function OverviewDashboard() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const dashboardRef = useRef<DatabricksDashboard | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+interface Stats {
+  totalUseCases: number
+  totalAccounts: number
+  meetingsThisMonth: number
+  conversionRate: number
+  stageCounts: Record<string, number>
+}
 
-  // Get dashboard config
-  const dashboardConfig = getDashboardConfig('overview')
+interface ActivityItem {
+  id: string
+  type: string
+  description: string
+  created_at: string
+  accounts: { id: string; name: string } | null
+}
 
-  // Fetch token from backend
-  useEffect(() => {
-    async function fetchToken() {
-      try {
-        const response = await fetch(
-          `${databricksConfig.api.baseUrl}${databricksConfig.api.tokenEndpoint}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dashboardId: dashboardConfig.id }),
-          }
+const stageColors: Record<string, string> = {
+  validating: 'bg-neon-blue',
+  scoping: 'bg-neon-purple',
+  evaluating: 'bg-yellow-400',
+  confirming: 'bg-neon-pink',
+  onboarding: 'bg-primary',
+  live: 'bg-green-400',
+}
+
+const stageLabels: Record<string, string> = {
+  validating: 'Validating',
+  scoping: 'Scoping',
+  evaluating: 'Evaluating',
+  confirming: 'Confirming',
+  onboarding: 'Onboarding',
+  live: 'Live',
+}
+
+function UseCasePipeline({ stageCounts }: { stageCounts: Record<string, number> }) {
+  const stages = Object.keys(stageLabels)
+  const maxCount = Math.max(...stages.map((s) => stageCounts[s] || 0), 1)
+
+  return (
+    <div className="space-y-4">
+      {stages.map((stage, i) => {
+        const count = stageCounts[stage] || 0
+        const widthPct = `${Math.max((count / maxCount) * 100, 5)}%`
+        return (
+          <motion.div
+            key={stage}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="flex items-center gap-4"
+          >
+            <div className="w-28 text-sm text-theme-secondary shrink-0">{stageLabels[stage]}</div>
+            <div className="flex-1 h-8 bg-theme-elevated rounded-lg overflow-hidden border border-theme">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: widthPct }}
+                transition={{ delay: i * 0.15, duration: 0.8, ease: 'easeOut' }}
+                className={`h-full ${stageColors[stage] || 'bg-gray-500'} rounded-lg flex items-center justify-end pr-3`}
+              >
+                <span className="text-xs font-semibold text-dark">{count}</span>
+              </motion.div>
+            </div>
+          </motion.div>
         )
+      })}
+    </div>
+  )
+}
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}))
-          throw new Error(errData.error || `Failed to get token: ${response.status}`)
-        }
+function timeAgo(dateStr: string): string {
+  const now = Date.now()
+  const then = new Date(dateStr).getTime()
+  const diff = now - then
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${mins} minutes ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`
+  const days = Math.floor(hrs / 24)
+  return `${days} day${days > 1 ? 's' : ''} ago`
+}
 
-        const data = await response.json()
-        setToken(data.token)
+function RecentActivity({ activities }: { activities: ActivityItem[] }) {
+  const iconMap: Record<string, React.ReactNode> = {
+    meeting: <Calendar className="w-4 h-4" />,
+    usecase: <Target className="w-4 h-4" />,
+    note: <FileText className="w-4 h-4" />,
+  }
+
+  return (
+    <div className="space-y-3">
+      {activities.map((activity, i) => (
+        <motion.div
+          key={activity.id}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: i * 0.1 }}
+          className="flex items-start gap-3 p-3 rounded-lg hover:bg-theme-subtle transition-colors cursor-pointer"
+        >
+          <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+            {iconMap[activity.type] || <Activity className="w-4 h-4" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-theme-primary truncate">{activity.description}</p>
+            <p className="text-xs text-theme-muted mt-1">{timeAgo(activity.created_at)}</p>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
+export function OverviewDashboard() {
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [statsRes, activitiesRes] = await Promise.all([
+          fetch(`${databricksConfig.api.baseUrl}${databricksConfig.api.statsEndpoint}`),
+          fetch(`${databricksConfig.api.baseUrl}${databricksConfig.api.activitiesEndpoint}?limit=5`),
+        ])
+        if (statsRes.ok) setStats(await statsRes.json())
+        if (activitiesRes.ok) setActivities(await activitiesRes.json())
       } catch (err) {
-        console.error('Failed to fetch dashboard token:', err)
-        setError(err instanceof Error ? err.message : 'Failed to authenticate for dashboard')
+        console.error('Failed to load dashboard data:', err)
+      } finally {
         setLoading(false)
       }
     }
+    load()
+  }, [])
 
-    fetchToken()
-  }, [dashboardConfig.id])
-
-  // Initialize dashboard when token is available
-  useEffect(() => {
-    if (!token || !containerRef.current) return
-
-    // Clean up existing dashboard
-    if (dashboardRef.current) {
-      dashboardRef.current = null
-    }
-
-    try {
-      const dashboard = new DatabricksDashboard({
-        instanceUrl: dashboardConfig.instanceUrl,
-        workspaceId: dashboardConfig.workspaceId,
-        dashboardId: dashboardConfig.id,
-        token: token,
-        container: containerRef.current,
-      })
-
-      dashboard.initialize()
-      dashboardRef.current = dashboard
-      setLoading(false)
-      setError(null)
-    } catch (err) {
-      console.error('Failed to initialize dashboard:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard')
-      setLoading(false)
-    }
-
-    // Cleanup on unmount
-    return () => {
-      dashboardRef.current = null
-    }
-  }, [token, dashboardConfig])
-
-  const handleRetry = () => {
-    setLoading(true)
-    setError(null)
-    setToken(null)
-    // Re-trigger token fetch
-    window.location.reload()
+  if (loading) {
+    return (
+      <div className="p-6 lg:p-8 flex items-center justify-center h-[calc(100vh-64px)]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
+          <p className="text-theme-secondary">Loading dashboard...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -108,68 +179,70 @@ export function OverviewDashboard() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="p-6 lg:p-8 space-y-6 h-[calc(100vh-64px)] flex flex-col"
+      className="p-6 lg:p-8 space-y-8"
     >
       {/* Page Header */}
-      <motion.div variants={itemVariants} className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-theme-primary">Overview</h1>
-          <p className="text-theme-secondary mt-1">{dashboardConfig.description}</p>
-        </div>
-        {error && (
-          <button
-            onClick={handleRetry}
-            className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Retry
-          </button>
-        )}
+      <motion.div variants={itemVariants}>
+        <h1 className="text-3xl font-bold text-theme-primary">Overview</h1>
+        <p className="text-theme-secondary mt-1">Your account management dashboard at a glance.</p>
       </motion.div>
 
-      {/* Dashboard Container */}
-      <motion.div
-        variants={itemVariants}
-        className="flex-1 glass-card overflow-hidden relative"
-      >
-        {/* Loading State */}
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-theme-card z-10">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
-              <p className="text-theme-secondary">{databricksConfig.ui.dashboard.loadingMessage}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-theme-card z-10">
-            <div className="text-center max-w-md px-6">
-              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="w-8 h-8 text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-theme-primary mb-2">
-                Failed to Load Dashboard
-              </h3>
-              <p className="text-theme-secondary text-sm mb-4">{error}</p>
-              <button
-                onClick={handleRetry}
-                className="px-6 py-2 bg-primary text-dark rounded-lg font-medium hover:bg-primary/90 transition-colors"
-              >
-                Try Again
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Dashboard Embed Container */}
-        <div
-          ref={containerRef}
-          id="dashboard-container"
-          className="w-full h-full"
-          style={{ minHeight: databricksConfig.ui.dashboard.height }}
+      {/* Stat Cards */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Active Use Cases"
+          value={stats?.totalUseCases ?? 0}
+          change={0}
+          trend="up"
+          icon={<Target className="w-5 h-5 text-primary" />}
         />
+        <StatCard
+          title="Accounts Managed"
+          value={stats?.totalAccounts ?? 0}
+          change={0}
+          trend="up"
+          icon={<Users className="w-5 h-5 text-neon-blue" />}
+        />
+        <StatCard
+          title="Meetings This Month"
+          value={stats?.meetingsThisMonth ?? 0}
+          change={0}
+          trend="up"
+          icon={<Calendar className="w-5 h-5 text-neon-purple" />}
+        />
+        <StatCard
+          title="Conversion Rate"
+          value={`${stats?.conversionRate ?? 0}%`}
+          change={0}
+          trend="up"
+          icon={<TrendingUp className="w-5 h-5 text-green-400" />}
+        />
+      </motion.div>
+
+      {/* Main Content Grid */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartCard
+          title="Use Case Pipeline"
+          subtitle="Current distribution across stages"
+          actions={
+            <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+              <Activity className="w-4 h-4 text-gray-400" />
+            </button>
+          }
+        >
+          <UseCasePipeline stageCounts={stats?.stageCounts || {}} />
+        </ChartCard>
+
+        <ChartCard
+          title="Recent Activity"
+          subtitle="Latest updates across your accounts"
+        >
+          {activities.length > 0 ? (
+            <RecentActivity activities={activities} />
+          ) : (
+            <p className="text-theme-muted text-sm py-8 text-center">No recent activity</p>
+          )}
+        </ChartCard>
       </motion.div>
     </motion.div>
   )
