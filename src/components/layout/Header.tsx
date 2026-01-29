@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, Sparkles, Sun, Moon } from 'lucide-react'
+import { Menu, X, Sparkles, Sun, Moon, User } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext'
+import { useUser } from '../../context/UserContext'
 
 interface Tab {
   id: string
@@ -13,7 +14,6 @@ interface HeaderProps {
   tabs: Tab[]
   activeTab: string
   onTabChange: (tabId: string) => void
-  onDocumentationClick?: () => void
 }
 
 function ThemeToggle() {
@@ -40,7 +40,49 @@ function ThemeToggle() {
   )
 }
 
-export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: HeaderProps) {
+function UserAvatar() {
+  const { user, loading } = useUser()
+  const { theme } = useTheme()
+
+  if (loading) {
+    return (
+      <div className={`w-9 h-9 rounded-full animate-pulse ${
+        theme === 'dark' ? 'bg-white/10' : 'bg-black/10'
+      }`} />
+    )
+  }
+
+  if (!user || user.email === 'unknown') {
+    return (
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+        theme === 'dark' ? 'bg-white/10 text-white/50' : 'bg-black/10 text-black/50'
+      }`}>
+        <User className="w-4 h-4" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="hidden lg:block text-right">
+        <p className="text-sm font-medium text-theme-primary leading-tight">
+          {user.displayName || user.email.split('@')[0]}
+        </p>
+        <p className="text-xs text-theme-muted leading-tight">
+          {user.email}
+        </p>
+      </div>
+      <div
+        className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-neon-blue flex items-center justify-center text-dark font-semibold text-sm"
+        title={user.email}
+      >
+        {user.initials}
+      </div>
+    </div>
+  )
+}
+
+export function Header({ tabs, activeTab, onTabChange }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const { theme } = useTheme()
@@ -117,13 +159,9 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
 
           {/* Right side actions */}
           <div className="hidden md:flex items-center gap-4">
-            <button
-              className="btn-ghost text-sm"
-              onClick={() => onDocumentationClick ? onDocumentationClick() : onTabChange('documentation')}
-            >
-              Documentation
-            </button>
             <ThemeToggle />
+            <div className="w-px h-6 bg-theme-subtle" />
+            <UserAvatar />
           </div>
 
           {/* Mobile menu button */}
@@ -170,16 +208,9 @@ export function Header({ tabs, activeTab, onTabChange, onDocumentationClick }: H
                   {tab.label}
                 </button>
               ))}
-              <div className="pt-4 border-t border-theme space-y-2">
-                <button
-                  className="w-full btn-ghost text-left"
-                  onClick={() => {
-                    onDocumentationClick ? onDocumentationClick() : onTabChange('documentation')
-                    setIsMobileMenuOpen(false)
-                  }}
-                >
-                  Documentation
-                </button>
+              {/* User info in mobile menu */}
+              <div className="pt-4 border-t border-theme">
+                <UserAvatar />
               </div>
             </div>
           </motion.div>
