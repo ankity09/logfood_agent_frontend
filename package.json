@@ -12,6 +12,7 @@
     "start": "node server/index.js"
   },
   "dependencies": {
+    "@databricks/aibi-client": "^1.0.1-alpha.0",
     "@tailwindcss/typography": "^0.5.19",
     "cors": "^2.8.5",
     "express": "^4.21.0",

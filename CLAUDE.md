@@ -78,14 +78,19 @@ Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` �
 
 ## Environment Variables
 
-**Databricks:**
+**Databricks (Backend - server/config.js):**
 - `DATABRICKS_HOST` - Workspace URL
 - `DATABRICKS_TOKEN` - PAT token (local dev)
 
-**Model Serving Endpoints:**
+**Model Serving Endpoints (Backend):**
 - `DATABRICKS_AGENT_ENDPOINT` - Multi-agent endpoint for Chat UI & Agent Tab (default: `agents_ankit_yadav-demo-logfood_agent_dev`)
 - `DATABRICKS_CLAUDE_ENDPOINT` - Claude endpoint for extraction & updates (default: `databricks-claude-haiku-4-5`)
 - `DATABRICKS_CHAT_ENDPOINT` - Legacy fallback (deprecated)
+
+**Dashboard Configuration (Frontend - prefix with VITE_):**
+- `VITE_DATABRICKS_INSTANCE_URL` - Workspace URL for dashboard embed
+- `VITE_DATABRICKS_WORKSPACE_ID` - Workspace ID for dashboard embed
+- `VITE_DASHBOARD_OVERVIEW_ID` - Dashboard ID for Overview page
 
 **Lakebase:**
 - `LAKEBASE_PG_HOST` - Postgres host

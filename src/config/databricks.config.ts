@@ -7,22 +7,24 @@
 
 export const databricksConfig = {
   // Workspace Configuration
+  // These can be overridden via environment variables for easy deployment changes
   workspace: {
-    instanceUrl: 'https://fevm-ay-demo-workspace.cloud.databricks.com',
-    workspaceId: '7474653873260502',
+    instanceUrl: import.meta.env.VITE_DATABRICKS_INSTANCE_URL || 'https://fe-sandbox-serverless-9thezy.cloud.databricks.com',
+    workspaceId: import.meta.env.VITE_DATABRICKS_WORKSPACE_ID || '7474651123329331',
   },
 
   // AI/BI Dashboard Configuration
   // Add multiple dashboards here and reference them by key
+  // Dashboard IDs can be overridden via environment variables
   dashboards: {
     overview: {
-      id: '01f0f8f352661100bb5e1d472157f546',
+      id: import.meta.env.VITE_DASHBOARD_OVERVIEW_ID || '01f0fd2317471778b706b2e7ec546fcc',
       title: 'Overview Dashboard',
       description: 'Main overview metrics and KPIs',
     },
     // Add more dashboards as needed:
     // analytics: {
-    //   id: 'your-analytics-dashboard-id',
+    //   id: import.meta.env.VITE_DASHBOARD_ANALYTICS_ID || 'your-analytics-dashboard-id',
     //   title: 'Analytics Dashboard',
     //   description: 'Detailed analytics and trends',
     // },
