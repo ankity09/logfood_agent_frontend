@@ -72,7 +72,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
         copied
           ? 'bg-green-400/10 text-green-400'
-          : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+          : 'bg-theme-elevated text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle border border-theme'
       }`}
     >
       {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -85,24 +85,24 @@ function ExtractedUseCaseCard({ useCase }: { useCase: ExtractedUseCase }) {
   const formattedText = `Use Case: ${useCase.title}\nAccount: ${useCase.account}\nStage: ${useCase.stage}\nDescription: ${useCase.description}\nNext Steps:\n${useCase.nextSteps.map((s) => `- ${s}`).join('\n')}`
 
   return (
-    <div className="p-4 rounded-xl bg-dark-200/50 border border-white/5 space-y-3">
+    <div className="p-4 rounded-xl bg-theme-elevated border border-theme space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Target className="w-4 h-4 text-primary shrink-0" />
-          <h4 className="text-sm font-semibold text-white">{useCase.title}</h4>
+          <h4 className="text-sm font-semibold text-theme-primary">{useCase.title}</h4>
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
           {useCase.stage}
         </span>
       </div>
 
-      <p className="text-xs text-gray-400 leading-relaxed">{useCase.description}</p>
+      <p className="text-xs text-theme-secondary leading-relaxed">{useCase.description}</p>
 
       <div>
-        <p className="text-xs text-gray-500 font-medium mb-1.5">Next Steps:</p>
+        <p className="text-xs text-theme-muted font-medium mb-1.5">Next Steps:</p>
         <ul className="space-y-1">
           {useCase.nextSteps.map((step, i) => (
-            <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+            <li key={i} className="text-xs text-theme-secondary flex items-start gap-2">
               <span className="text-primary mt-0.5">-</span>
               {step}
             </li>
@@ -110,9 +110,9 @@ function ExtractedUseCaseCard({ useCase }: { useCase: ExtractedUseCase }) {
         </ul>
       </div>
 
-      <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+      <div className="flex items-center gap-2 pt-2 border-t border-theme">
         <CopyButton text={formattedText} label="Copy to Clipboard" />
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all">
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-theme-elevated text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle border border-theme transition-all">
           <ExternalLink className="w-3 h-3" />
           Export to Salesforce
         </button>
@@ -404,8 +404,8 @@ export function MeetingNotesPage() {
       {/* Page Header */}
       <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Meeting Notes</h1>
-          <p className="text-gray-400 mt-1">Upload meeting notes and extract use case details automatically with AI.</p>
+          <h1 className="text-3xl font-bold text-theme-primary">Meeting Notes</h1>
+          <p className="text-theme-secondary mt-1">Upload meeting notes and extract use case details automatically with AI.</p>
         </div>
       </motion.div>
 
@@ -418,7 +418,7 @@ export function MeetingNotesPage() {
           className={`relative border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
             isDragging
               ? 'border-primary bg-primary/5'
-              : 'border-white/10 hover:border-white/20 bg-dark-100/30'
+              : 'border-theme hover:border-primary/30 bg-theme-elevated'
           }`}
         >
           {isProcessing ? (
@@ -428,7 +428,7 @@ export function MeetingNotesPage() {
                 <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-t-primary rounded-full animate-spin" />
               </div>
               <div>
-                <p className="text-white font-medium">Processing "{uploadedFileName}"</p>
+                <p className="text-theme-primary font-medium">Processing "{uploadedFileName}"</p>
                 <p className="text-sm text-primary mt-1">{processingStatus}</p>
               </div>
             </div>
@@ -437,11 +437,11 @@ export function MeetingNotesPage() {
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-neon-purple/20 flex items-center justify-center mx-auto mb-4 border border-primary/20">
                 <Upload className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Upload Meeting Notes</h3>
-              <p className="text-sm text-gray-400 mb-4">
+              <h3 className="text-lg font-semibold text-theme-primary mb-2">Upload Meeting Notes</h3>
+              <p className="text-sm text-theme-secondary mb-4">
                 Drag and drop your meeting notes here, or click to browse.
               </p>
-              <p className="text-xs text-gray-500 mb-6">Supports .txt, .md, .docx, .pdf files</p>
+              <p className="text-xs text-theme-muted mb-6">Supports .txt, .md, .docx, .pdf files</p>
               <label className="btn-primary cursor-pointer inline-flex items-center gap-2">
                 <FileText className="w-4 h-4" />
                 Browse Files
@@ -486,13 +486,13 @@ export function MeetingNotesPage() {
             { step: '2', title: 'AI Extraction', desc: 'Databricks AI analyzes and extracts use cases, stages, and next steps.', icon: <Sparkles className="w-5 h-5" /> },
             { step: '3', title: 'Copy & Export', desc: 'Copy extracted information to paste into Salesforce or other tools.', icon: <ClipboardCopy className="w-5 h-5" /> },
           ].map((item) => (
-            <div key={item.step} className="flex items-start gap-3 p-4 rounded-xl bg-dark-100/30 border border-white/5">
+            <div key={item.step} className="flex items-start gap-3 p-4 rounded-xl bg-theme-elevated border border-theme">
               <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
                 {item.icon}
               </div>
               <div>
-                <h4 className="text-sm font-medium text-white">{item.title}</h4>
-                <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
+                <h4 className="text-sm font-medium text-theme-primary">{item.title}</h4>
+                <p className="text-xs text-theme-secondary mt-0.5">{item.desc}</p>
               </div>
             </div>
           ))}
@@ -501,18 +501,18 @@ export function MeetingNotesPage() {
 
       {/* Processed Notes */}
       <motion.div variants={itemVariants} className="space-y-4">
-        <h2 className="text-xl font-semibold text-white">Processed Notes</h2>
+        <h2 className="text-xl font-semibold text-theme-primary">Processed Notes</h2>
 
         {loading ? (
           <div className="text-center py-12">
             <Loader2 className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
-            <p className="text-gray-400">Loading meeting notes...</p>
+            <p className="text-theme-secondary">Loading meeting notes...</p>
           </div>
         ) : notes.length === 0 ? (
           <div className="text-center py-12">
-            <FileText className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 text-lg">No meeting notes yet</p>
-            <p className="text-gray-500 text-sm mt-1">Upload your first meeting notes above to get started</p>
+            <FileText className="w-12 h-12 text-theme-muted mx-auto mb-4" />
+            <p className="text-theme-secondary text-lg">No meeting notes yet</p>
+            <p className="text-theme-muted text-sm mt-1">Upload your first meeting notes above to get started</p>
           </div>
         ) : (
         <AnimatePresence>
@@ -527,15 +527,15 @@ export function MeetingNotesPage() {
                 {/* Note Header */}
                 <button
                   onClick={() => toggleExpand(note.id)}
-                  className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center justify-between p-5 hover:bg-theme-subtle transition-colors"
                 >
                   <div className="flex items-center gap-4">
                     <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-neon-purple/20 text-primary border border-primary/20">
                       <FileText className="w-5 h-5" />
                     </div>
                     <div className="text-left">
-                      <h3 className="text-sm font-semibold text-white">{note.filename}</h3>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                      <h3 className="text-sm font-semibold text-theme-primary">{note.filename}</h3>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-theme-muted">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {note.uploadDate}
@@ -552,9 +552,9 @@ export function MeetingNotesPage() {
                     </div>
                   </div>
                   {note.isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
+                    <ChevronUp className="w-5 h-5 text-theme-secondary" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                    <ChevronDown className="w-5 h-5 text-theme-secondary" />
                   )}
                 </button>
 
@@ -565,22 +565,22 @@ export function MeetingNotesPage() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-white/5"
+                      className="border-t border-theme"
                     >
                       <div className="p-5 space-y-4">
                         {/* Summary */}
                         <div>
-                          <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Summary</h4>
-                          <p className="text-sm text-gray-300 leading-relaxed">{note.summary}</p>
+                          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Summary</h4>
+                          <p className="text-sm text-theme-secondary leading-relaxed">{note.summary}</p>
                         </div>
 
                         {/* Attendees */}
                         {note.attendees.length > 0 && (
                           <div>
-                            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Attendees</h4>
+                            <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Attendees</h4>
                             <div className="flex flex-wrap gap-2">
                               {note.attendees.map((a, i) => (
-                                <span key={i} className="text-xs bg-dark-50 text-gray-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                                <span key={i} className="text-xs bg-theme-elevated text-theme-secondary px-2.5 py-1 rounded-lg flex items-center gap-1.5 border border-theme">
                                   <Users className="w-3 h-3" />
                                   {a}
                                 </span>
@@ -592,11 +592,11 @@ export function MeetingNotesPage() {
                         {/* Extracted Use Cases */}
                         <div>
                           <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Extracted Use Cases</h4>
+                            <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider">Extracted Use Cases</h4>
                             {note.extractedUseCases.length > 0 && (
                               <button
                                 onClick={() => copyAllUseCases(note)}
-                                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+                                className="flex items-center gap-1.5 text-xs text-theme-secondary hover:text-theme-primary transition-colors"
                               >
                                 <ClipboardCopy className="w-3 h-3" />
                                 Copy All
@@ -610,7 +610,7 @@ export function MeetingNotesPage() {
                               ))}
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-500 italic">No use cases were extracted from this meeting.</p>
+                            <p className="text-sm text-theme-muted italic">No use cases were extracted from this meeting.</p>
                           )}
                         </div>
                       </div>

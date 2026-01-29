@@ -62,8 +62,8 @@ export function StatCard({ title, value, change, icon, trend = 'neutral' }: Stat
           )}
         </div>
 
-        <p className="text-gray-400 text-sm mb-1">{title}</p>
-        <p className="text-3xl font-bold text-white">{value}</p>
+        <p className="text-theme-secondary text-sm mb-1">{title}</p>
+        <p className="text-3xl font-bold text-theme-primary">{value}</p>
       </div>
     </Card>
   )
@@ -81,8 +81,8 @@ export function ChartCard({ title, subtitle, children, actions }: ChartCardProps
     <Card hover={false} className="h-full">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          {subtitle && <p className="text-sm text-gray-400 mt-1">{subtitle}</p>}
+          <h3 className="text-lg font-semibold text-theme-primary">{title}</h3>
+          {subtitle && <p className="text-sm text-theme-secondary mt-1">{subtitle}</p>}
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>

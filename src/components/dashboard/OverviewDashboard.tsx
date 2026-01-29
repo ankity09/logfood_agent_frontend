@@ -80,8 +80,8 @@ function UseCasePipeline({ stageCounts }: { stageCounts: Record<string, number> 
             transition={{ delay: i * 0.1 }}
             className="flex items-center gap-4"
           >
-            <div className="w-28 text-sm text-gray-400 shrink-0">{stageLabels[stage]}</div>
-            <div className="flex-1 h-8 bg-dark-50 rounded-lg overflow-hidden">
+            <div className="w-28 text-sm text-theme-secondary shrink-0">{stageLabels[stage]}</div>
+            <div className="flex-1 h-8 bg-theme-elevated rounded-lg overflow-hidden border border-theme">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: widthPct }}
@@ -125,14 +125,14 @@ function RecentActivity({ activities }: { activities: ActivityItem[] }) {
           initial={{ opacity: 0, x: -10 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.1 }}
-          className="flex items-start gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+          className="flex items-start gap-3 p-3 rounded-lg hover:bg-theme-subtle transition-colors cursor-pointer"
         >
           <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
             {iconMap[activity.type] || <Activity className="w-4 h-4" />}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm text-gray-200 truncate">{activity.description}</p>
-            <p className="text-xs text-gray-500 mt-1">{timeAgo(activity.created_at)}</p>
+            <p className="text-sm text-theme-primary truncate">{activity.description}</p>
+            <p className="text-xs text-theme-muted mt-1">{timeAgo(activity.created_at)}</p>
           </div>
         </motion.div>
       ))}
@@ -168,7 +168,7 @@ export function OverviewDashboard() {
       <div className="p-6 lg:p-8 flex items-center justify-center h-[calc(100vh-64px)]">
         <div className="text-center">
           <Loader2 className="w-8 h-8 text-primary mx-auto mb-4 animate-spin" />
-          <p className="text-gray-400">Loading dashboard...</p>
+          <p className="text-theme-secondary">Loading dashboard...</p>
         </div>
       </div>
     )
@@ -183,8 +183,8 @@ export function OverviewDashboard() {
     >
       {/* Page Header */}
       <motion.div variants={itemVariants}>
-        <h1 className="text-3xl font-bold text-white">Overview</h1>
-        <p className="text-gray-400 mt-1">Your account management dashboard at a glance.</p>
+        <h1 className="text-3xl font-bold text-theme-primary">Overview</h1>
+        <p className="text-theme-secondary mt-1">Your account management dashboard at a glance.</p>
       </motion.div>
 
       {/* Stat Cards */}
@@ -240,7 +240,7 @@ export function OverviewDashboard() {
           {activities.length > 0 ? (
             <RecentActivity activities={activities} />
           ) : (
-            <p className="text-gray-500 text-sm py-8 text-center">No recent activity</p>
+            <p className="text-theme-muted text-sm py-8 text-center">No recent activity</p>
           )}
         </ChartCard>
       </motion.div>

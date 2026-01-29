@@ -44,11 +44,11 @@ function FeatureCard({ icon, title, description, features }: FeatureCardProps) {
           {icon}
         </div>
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-          <p className="text-gray-400 text-sm mb-4">{description}</p>
+          <h3 className="text-lg font-semibold text-theme-primary mb-2">{title}</h3>
+          <p className="text-theme-secondary text-sm mb-4">{description}</p>
           <ul className="space-y-2">
             {features.map((feature, index) => (
-              <li key={index} className="flex items-start gap-2 text-sm text-gray-300">
+              <li key={index} className="flex items-start gap-2 text-sm text-theme-secondary">
                 <ChevronRight className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                 <span>{feature}</span>
               </li>
@@ -73,10 +73,10 @@ export function DocumentationPage() {
           <BookOpen className="w-4 h-4" />
           <span>Documentation</span>
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+        <h1 className="text-4xl md:text-5xl font-bold text-theme-primary mb-4">
           Welcome to <span className="text-gradient">LogFoodAgent</span>
         </h1>
-        <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+        <p className="text-xl text-theme-secondary max-w-2xl mx-auto">
           Your AI-powered solution for managing accounts, tracking use cases, and generating
           professional Salesforce updates with ease.
         </p>
@@ -94,29 +94,29 @@ export function DocumentationPage() {
             <div className="p-2 rounded-lg bg-gradient-to-br from-neon-purple to-primary">
               <Zap className="w-5 h-5 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white">Quick Start</h2>
+            <h2 className="text-2xl font-bold text-theme-primary">Quick Start</h2>
           </div>
           <div className="grid md:grid-cols-3 gap-6">
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="p-4 rounded-xl bg-theme-elevated border border-theme">
               <div className="text-3xl font-bold text-primary mb-2">1</div>
-              <h3 className="font-semibold text-white mb-1">Explore Overview</h3>
-              <p className="text-sm text-gray-400">
+              <h3 className="font-semibold text-theme-primary mb-1">Explore Overview</h3>
+              <p className="text-sm text-theme-secondary">
                 Start with the Overview tab to see your embedded Databricks AI/BI dashboard with
                 key metrics and insights.
               </p>
             </div>
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="p-4 rounded-xl bg-theme-elevated border border-theme">
               <div className="text-3xl font-bold text-primary mb-2">2</div>
-              <h3 className="font-semibold text-white mb-1">Manage Use Cases</h3>
-              <p className="text-sm text-gray-400">
+              <h3 className="font-semibold text-theme-primary mb-1">Manage Use Cases</h3>
+              <p className="text-sm text-theme-secondary">
                 Track your sales opportunities in the Use Cases tab. Use the AI Update Generator
                 to create professional Salesforce updates.
               </p>
             </div>
-            <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="p-4 rounded-xl bg-theme-elevated border border-theme">
               <div className="text-3xl font-bold text-primary mb-2">3</div>
-              <h3 className="font-semibold text-white mb-1">Chat with Agent</h3>
-              <p className="text-sm text-gray-400">
+              <h3 className="font-semibold text-theme-primary mb-1">Chat with Agent</h3>
+              <p className="text-sm text-theme-secondary">
                 Ask questions about your accounts and use cases using the AI Agent powered by
                 Databricks Model Serving.
               </p>
@@ -134,7 +134,7 @@ export function DocumentationPage() {
       >
         <motion.h2
           variants={itemVariants}
-          className="text-2xl font-bold text-white flex items-center gap-3"
+          className="text-2xl font-bold text-theme-primary flex items-center gap-3"
         >
           <Database className="w-6 h-6 text-primary" />
           Features & Capabilities
@@ -238,9 +238,9 @@ export function DocumentationPage() {
             <div className="p-2 rounded-lg bg-gradient-to-br from-primary/20 to-neon-blue/20">
               <TrendingUp className="w-5 h-5 text-primary" />
             </div>
-            <h2 className="text-2xl font-bold text-white">Use Case Stages</h2>
+            <h2 className="text-2xl font-bold text-theme-primary">Use Case Stages</h2>
           </div>
-          <p className="text-gray-400 mb-6">
+          <p className="text-theme-secondary mb-6">
             Track your opportunities through these stages from initial discovery to production:
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -276,15 +276,15 @@ export function DocumentationPage() {
             <div className="p-2 rounded-lg bg-gradient-to-br from-neon-purple to-primary">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white">Pro Tips</h2>
+            <h2 className="text-2xl font-bold text-theme-primary">Pro Tips</h2>
           </div>
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <h3 className="font-semibold text-white flex items-center gap-2">
+              <h3 className="font-semibold text-theme-primary flex items-center gap-2">
                 <Target className="w-4 h-4 text-primary" />
                 AI Update Generator
               </h3>
-              <ul className="space-y-2 text-sm text-gray-400">
+              <ul className="space-y-2 text-sm text-theme-secondary">
                 <li className="flex items-start gap-2">
                   <span className="text-primary">•</span>
                   Include specific details like names, dates, and action items in your raw notes
@@ -300,11 +300,11 @@ export function DocumentationPage() {
               </ul>
             </div>
             <div className="space-y-4">
-              <h3 className="font-semibold text-white flex items-center gap-2">
+              <h3 className="font-semibold text-theme-primary flex items-center gap-2">
                 <Bot className="w-4 h-4 text-neon-blue" />
                 AI Agent
               </h3>
-              <ul className="space-y-2 text-sm text-gray-400">
+              <ul className="space-y-2 text-sm text-theme-secondary">
                 <li className="flex items-start gap-2">
                   <span className="text-neon-blue">•</span>
                   Ask specific questions like "What use cases are in the confirming stage?"
@@ -328,7 +328,7 @@ export function DocumentationPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.7 }}
-        className="mt-12 text-center text-gray-500 text-sm"
+        className="mt-12 text-center text-theme-muted text-sm"
       >
         <p>
           LogFoodAgent is powered by{' '}

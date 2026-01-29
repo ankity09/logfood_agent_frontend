@@ -315,4 +315,14 @@
   .border-theme {
     border-color: var(--color-border);
   }
+
+  /* Additional theme-aware backgrounds for components */
+  .bg-theme-subtle {
+    background-color: var(--color-bg-hover);
+  }
+
+  /* Theme-aware dark overlays for light mode */
+  .bg-theme-overlay {
+    background-color: var(--color-bg-elevated);
+  }
 }
