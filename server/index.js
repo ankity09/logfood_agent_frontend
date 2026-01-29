@@ -271,7 +271,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const data = await response.json()
-    console.log(`Agent response type:`, typeof data, Array.isArray(data) ? 'array' : 'object')
+    console.log(`Agent response type:`, typeof data, Array.isArray(data) ? `array[${data.length}]` : 'object')
 
     // Extract the assistant's message from the response
     // Handle the multi-agent response format which returns an array of messages/tool calls
@@ -279,11 +279,17 @@ app.post('/api/chat', async (req, res) => {
 
     if (Array.isArray(data)) {
       // Multi-agent format: array of messages and tool calls
+      // Log the types of items in the response for debugging
+      const itemTypes = data.map(item => `${item.type}${item.role ? `(${item.role})` : ''}`).join(', ')
+      console.log(`Agent response items: ${itemTypes}`)
+
       // Find the last assistant message with output_text content
       const assistantMessages = data.filter(
         item => item.type === 'message' && item.role === 'assistant'
       )
       const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
+
+      console.log(`Found ${assistantMessages.length} assistant messages, using the last one`)
 
       if (lastAssistantMessage?.content) {
         // Content is an array of content blocks
@@ -294,9 +300,13 @@ app.post('/api/chat', async (req, res) => {
 
         if (textContent) {
           assistantMessage = textContent
+          console.log(`Extracted text content, length: ${textContent.length}`)
+        } else {
+          console.log(`No text content found in last assistant message`)
         }
+      } else {
+        console.log(`Last assistant message has no content array`)
       }
-      console.log(`Extracted from ${assistantMessages.length} assistant messages`)
     } else if (data.choices && data.choices[0]?.message?.content) {
       // OpenAI-compatible format
       assistantMessage = data.choices[0].message.content
