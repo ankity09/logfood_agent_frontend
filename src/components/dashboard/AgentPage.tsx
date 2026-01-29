@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   Send,
   Sparkles,
@@ -255,7 +257,15 @@ export function AgentPage() {
                         : 'bg-gradient-to-r from-primary to-neon-blue text-dark rounded-tr-sm'
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                  {message.role === 'assistant' ? (
+                    <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none prose-headings:text-theme-primary prose-p:text-theme-primary prose-strong:text-theme-primary prose-li:text-theme-secondary prose-table:text-xs prose-th:text-theme-primary prose-td:text-theme-secondary prose-code:text-primary prose-code:bg-theme-subtle prose-code:px-1 prose-code:rounded">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                  )}
                 </div>
                 {message.attachments && message.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-2">

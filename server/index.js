@@ -271,14 +271,33 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const data = await response.json()
-    console.log(`Agent response structure:`, JSON.stringify(Object.keys(data)))
-    console.log(`Agent raw response (first 500 chars):`, JSON.stringify(data).substring(0, 500))
+    console.log(`Agent response type:`, typeof data, Array.isArray(data) ? 'array' : 'object')
 
     // Extract the assistant's message from the response
-    // Handle different response formats from Databricks agent endpoints
+    // Handle the multi-agent response format which returns an array of messages/tool calls
     let assistantMessage = 'I received your message but could not generate a response.'
 
-    if (data.choices && data.choices[0]?.message?.content) {
+    if (Array.isArray(data)) {
+      // Multi-agent format: array of messages and tool calls
+      // Find the last assistant message with output_text content
+      const assistantMessages = data.filter(
+        item => item.type === 'message' && item.role === 'assistant'
+      )
+      const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
+
+      if (lastAssistantMessage?.content) {
+        // Content is an array of content blocks
+        const textContent = lastAssistantMessage.content
+          .filter(c => c.type === 'output_text' || c.type === 'text')
+          .map(c => c.text)
+          .join('\n\n')
+
+        if (textContent) {
+          assistantMessage = textContent
+        }
+      }
+      console.log(`Extracted from ${assistantMessages.length} assistant messages`)
+    } else if (data.choices && data.choices[0]?.message?.content) {
       // OpenAI-compatible format
       assistantMessage = data.choices[0].message.content
     } else if (data.output) {

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import {
   MessageCircle,
   X,
@@ -251,7 +253,15 @@ export function Chatbot() {
                           : 'bg-gradient-to-r from-primary to-neon-blue text-dark rounded-tr-sm'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    {message.role === 'assistant' ? (
+                      <div className="text-sm prose prose-sm prose-invert max-w-none prose-headings:text-gray-100 prose-p:text-gray-100 prose-strong:text-white prose-li:text-gray-200 prose-table:text-xs prose-th:text-gray-100 prose-td:text-gray-200 prose-code:text-primary prose-code:bg-dark-100 prose-code:px-1 prose-code:rounded">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {message.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    )}
                     <p
                       className={`text-xs mt-1 ${
                         message.role === 'user'
