@@ -68,8 +68,11 @@ export const config = {
   },
 
   chat: {
-    // Maximum tokens for chat responses
-    maxTokens: parseInt(process.env.CHAT_MAX_TOKENS || '1024', 10),
+    // Maximum tokens for Claude endpoint (extraction, updates)
+    maxTokens: parseInt(process.env.CHAT_MAX_TOKENS || '2048', 10),
+
+    // Maximum tokens for agent endpoint (deep research, longer outputs)
+    agentMaxTokens: parseInt(process.env.AGENT_MAX_TOKENS || '8192', 10),
 
     // Temperature for chat responses (0-1)
     temperature: parseFloat(process.env.CHAT_TEMPERATURE || '0.7'),

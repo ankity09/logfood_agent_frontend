@@ -204,7 +204,10 @@ app.post('/api/auth/dashboard-token', async (req, res) => {
 /**
  * Chat endpoint - proxy to Databricks Model Serving
  *
- * Uses service principal token for Model Serving (better scope handling)
+ * Uses the multi-agent endpoint which expects a different request schema:
+ * - input: Array (required) - the user's message or conversation
+ * - max_output_tokens: long (optional) - instead of max_tokens
+ * - context: { conversation_id, user_id } (optional)
  */
 app.post('/api/chat', async (req, res) => {
   try {
@@ -230,10 +233,27 @@ app.post('/api/chat', async (req, res) => {
     // Use the multi-agent endpoint for chat (has Genie tables and deep research)
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
 
+    // Get the last user message as input for the agent
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()
+    const userInput = lastUserMessage?.content || ''
+
+    // Build the request payload for the agent endpoint
+    // Agent expects: input (array), max_output_tokens, temperature, context
+    // Use higher token limit for deep research agent
+    const agentPayload = {
+      input: userInput,
+      max_output_tokens: config.chat.agentMaxTokens,
+      temperature: config.chat.temperature,
+      context: {
+        user_id: userEmail,
+      },
+    }
+
     console.log(`Chat request from user: ${userEmail}`)
     console.log(`Endpoint: ${config.databricks.agentEndpoint}`)
     console.log(`Token source: ${source}`)
     console.log(`Messages count: ${messages.length}`)
+    console.log(`Agent payload:`, JSON.stringify(agentPayload, null, 2))
 
     const response = await fetch(endpointUrl, {
       method: 'POST',
@@ -241,11 +261,7 @@ app.post('/api/chat', async (req, res) => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        messages,
-        max_tokens: config.chat.maxTokens,
-        temperature: config.chat.temperature,
-      }),
+      body: JSON.stringify(agentPayload),
     })
 
     if (!response.ok) {
@@ -259,17 +275,25 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const data = await response.json()
+    console.log(`Agent response structure:`, JSON.stringify(Object.keys(data)))
+    console.log(`Agent raw response (first 500 chars):`, JSON.stringify(data).substring(0, 500))
 
     // Extract the assistant's message from the response
-    // Handle different response formats from Databricks endpoints
+    // Handle different response formats from Databricks agent endpoints
     let assistantMessage = 'I received your message but could not generate a response.'
 
     if (data.choices && data.choices[0]?.message?.content) {
       // OpenAI-compatible format
       assistantMessage = data.choices[0].message.content
     } else if (data.output) {
-      // Direct output format
-      assistantMessage = data.output
+      // Direct output format (common for agents)
+      assistantMessage = typeof data.output === 'string' ? data.output : JSON.stringify(data.output)
+    } else if (data.content) {
+      // Content field format
+      assistantMessage = typeof data.content === 'string' ? data.content : JSON.stringify(data.content)
+    } else if (data.response) {
+      // Response field format
+      assistantMessage = typeof data.response === 'string' ? data.response : JSON.stringify(data.response)
     } else if (data.predictions && data.predictions[0]) {
       // MLflow predictions format
       assistantMessage = typeof data.predictions[0] === 'string'
@@ -297,7 +321,7 @@ app.post('/api/chat', async (req, res) => {
 /**
  * Streaming chat endpoint
  *
- * Uses service principal token for Model Serving (better scope handling)
+ * Uses the multi-agent endpoint with streaming enabled
  */
 app.post('/api/chat/stream', async (req, res) => {
   try {
@@ -327,9 +351,26 @@ app.post('/api/chat/stream', async (req, res) => {
     // Use the multi-agent endpoint for streaming chat (has Genie tables and deep research)
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
 
+    // Get the last user message as input for the agent
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()
+    const userInput = lastUserMessage?.content || ''
+
+    // Build the request payload for the agent endpoint
+    // Use higher token limit for deep research agent
+    const agentPayload = {
+      input: userInput,
+      max_output_tokens: config.chat.agentMaxTokens,
+      temperature: config.chat.temperature,
+      stream: true,
+      context: {
+        user_id: userEmail,
+      },
+    }
+
     console.log(`Streaming chat request from user: ${userEmail}`)
     console.log(`Endpoint: ${config.databricks.agentEndpoint}`)
     console.log(`Token source: ${source}`)
+    console.log(`Agent payload:`, JSON.stringify(agentPayload, null, 2))
 
     const response = await fetch(endpointUrl, {
       method: 'POST',
@@ -337,12 +378,7 @@ app.post('/api/chat/stream', async (req, res) => {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        messages,
-        max_tokens: config.chat.maxTokens,
-        temperature: config.chat.temperature,
-        stream: true,
-      }),
+      body: JSON.stringify(agentPayload),
     })
 
     if (!response.ok) {
