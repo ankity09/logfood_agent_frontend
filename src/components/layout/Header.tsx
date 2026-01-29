@@ -66,10 +66,7 @@ function UserAvatar() {
     <div className="flex items-center gap-3">
       <div className="hidden lg:block text-right">
         <p className="text-sm font-medium text-theme-primary leading-tight">
-          {user.displayName || user.email.split('@')[0]}
-        </p>
-        <p className="text-xs text-theme-muted leading-tight">
-          {user.email}
+          {user.displayName || 'User'}
         </p>
       </div>
       <div

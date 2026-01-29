@@ -17,36 +17,45 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
 
-function getInitials(email: string, displayName: string | null): string {
-  if (displayName) {
-    const parts = displayName.split(' ')
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-    }
-    return displayName.substring(0, 2).toUpperCase()
-  }
-  // Extract from email (e.g., "john.doe@company.com" -> "JD")
-  const localPart = email.split('@')[0]
-  const nameParts = localPart.split(/[._-]/)
-  if (nameParts.length >= 2) {
-    return (nameParts[0][0] + nameParts[1][0]).toUpperCase()
-  }
-  return localPart.substring(0, 2).toUpperCase()
-}
+function getDisplayName(email: string): string | null {
+  if (!email || email === 'unknown') return null
 
-function getDisplayName(email: string, forwardedUser: string | null): string | null {
-  if (forwardedUser) {
-    return forwardedUser
-  }
-  // Try to create a display name from email (e.g., "john.doe@company.com" -> "John Doe")
+  // Extract display name from email (e.g., "ankit.yadav@databricks.com" -> "Ankit Yadav")
   const localPart = email.split('@')[0]
   const nameParts = localPart.split(/[._-]/)
+
   if (nameParts.length >= 2) {
     return nameParts
+      .filter(part => part.length > 0)
       .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join(' ')
   }
+
+  // Single name - just capitalize it
+  if (localPart.length > 0) {
+    return localPart.charAt(0).toUpperCase() + localPart.slice(1).toLowerCase()
+  }
+
   return null
+}
+
+function getInitials(email: string): string {
+  if (!email || email === 'unknown') return '??'
+
+  // Extract initials from email (e.g., "ankit.yadav@databricks.com" -> "AY")
+  const localPart = email.split('@')[0]
+  const nameParts = localPart.split(/[._-]/).filter(part => part.length > 0)
+
+  if (nameParts.length >= 2) {
+    return (nameParts[0][0] + nameParts[1][0]).toUpperCase()
+  }
+
+  // Single name - take first two characters
+  if (localPart.length >= 2) {
+    return localPart.substring(0, 2).toUpperCase()
+  }
+
+  return localPart.toUpperCase() || '??'
 }
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -67,14 +76,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       const data = await response.json()
 
-      const displayName = getDisplayName(data.email, data.forwardedUser)
-      const initials = getInitials(data.email, displayName)
-
       setUser({
         authenticated: data.authenticated,
         email: data.email,
-        displayName,
-        initials,
+        displayName: getDisplayName(data.email),
+        initials: getInitials(data.email),
       })
     } catch (err) {
       console.error('Failed to fetch user:', err)
