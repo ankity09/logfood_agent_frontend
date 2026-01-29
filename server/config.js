@@ -7,7 +7,9 @@
  * Environment Variables:
  * - DATABRICKS_HOST: Databricks workspace URL
  * - DATABRICKS_TOKEN: Personal Access Token or Service Principal token
- * - DATABRICKS_CHAT_ENDPOINT: Model serving endpoint name for chat
+ * - DATABRICKS_AGENT_ENDPOINT: Multi-agent endpoint for chat/agent UI (Genie + research)
+ * - DATABRICKS_CLAUDE_ENDPOINT: Claude endpoint for extraction/update generation
+ * - DATABRICKS_CHAT_ENDPOINT: (Legacy) Falls back to this if others not set
  * - LAKEBASE_PG_HOST: Lakebase Postgres host
  * - LAKEBASE_PG_DATABASE: Lakebase database name
  * - LAKEBASE_PG_USER: Lakebase Postgres user (Databricks identity)
@@ -22,6 +24,10 @@
 // Detect if running in Databricks Apps environment
 const isDatabricksApp = !!process.env.DATABRICKS_APP_NAME
 
+// Default endpoints
+const DEFAULT_AGENT_ENDPOINT = 'agents_ankit_yadav-demo-logfood_agent_dev'
+const DEFAULT_CLAUDE_ENDPOINT = 'databricks-claude-haiku-4-5'
+
 export const config = {
   databricks: {
     // Workspace URL - auto-detected in Databricks Apps, or override with DATABRICKS_HOST
@@ -33,9 +39,18 @@ export const config = {
     // In Databricks Apps, you can use the service principal token or set DATABRICKS_TOKEN
     token: process.env.DATABRICKS_TOKEN || '',
 
-    // Chat model serving endpoint name
+    // Multi-agent endpoint for chat UI and Agent tab
+    // This endpoint has a supervisor with Genie tables and deep research capabilities
+    agentEndpoint:
+      process.env.DATABRICKS_AGENT_ENDPOINT || DEFAULT_AGENT_ENDPOINT,
+
+    // Claude endpoint for AI extraction and Salesforce update generation
+    claudeEndpoint:
+      process.env.DATABRICKS_CLAUDE_ENDPOINT || DEFAULT_CLAUDE_ENDPOINT,
+
+    // Legacy: fallback chat endpoint (used if specific endpoints not configured)
     chatEndpoint:
-      process.env.DATABRICKS_CHAT_ENDPOINT || 'databricks-claude-haiku-4-5',
+      process.env.DATABRICKS_CHAT_ENDPOINT || DEFAULT_CLAUDE_ENDPOINT,
 
     // Flag indicating Databricks Apps environment
     isDatabricksApp,
@@ -101,7 +116,8 @@ export function logConfig() {
   console.log('Server Configuration:')
   console.log(`  Environment: ${isDatabricksApp ? 'Databricks App' : 'Standalone'}`)
   console.log(`  Databricks Host: ${config.databricks.instanceUrl}`)
-  console.log(`  Chat Endpoint: ${config.databricks.chatEndpoint}`)
+  console.log(`  Agent Endpoint: ${config.databricks.agentEndpoint} (Chat UI, Agent Tab)`)
+  console.log(`  Claude Endpoint: ${config.databricks.claudeEndpoint} (Extraction, Updates)`)
   console.log(`  Lakebase PG Host: ${config.lakebase.pgHost || 'Not set'}`)
   console.log(`  Token Configured: ${config.databricks.token ? 'Yes' : 'No'}`)
   console.log(`  Port: ${config.server.port}`)

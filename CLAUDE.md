@@ -37,7 +37,9 @@ For local development, run both servers in separate terminals.
 **Frontend:** React 18 + TypeScript + Tailwind CSS + Framer Motion
 **Backend:** Express.js serving SPA and API routes
 **Database:** Databricks Lakebase (Postgres-compatible)
-**AI Chat:** Databricks Model Serving (Claude Haiku 4.5)
+**AI Agents:** Two Model Serving endpoints:
+  - Multi-agent supervisor (Genie tables + deep research) for Chat UI & Agent Tab
+  - Claude Haiku 4.5 for meeting notes extraction & Salesforce updates
 **Auth:** On-behalf-of-user via `X-Forwarded-Access-Token` header
 
 ## Key Directories
@@ -79,7 +81,11 @@ Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` �
 **Databricks:**
 - `DATABRICKS_HOST` - Workspace URL
 - `DATABRICKS_TOKEN` - PAT token (local dev)
-- `DATABRICKS_CHAT_ENDPOINT` - Model Serving endpoint name
+
+**Model Serving Endpoints:**
+- `DATABRICKS_AGENT_ENDPOINT` - Multi-agent endpoint for Chat UI & Agent Tab (default: `agents_ankit_yadav-demo-logfood_agent_dev`)
+- `DATABRICKS_CLAUDE_ENDPOINT` - Claude endpoint for extraction & updates (default: `databricks-claude-haiku-4-5`)
+- `DATABRICKS_CHAT_ENDPOINT` - Legacy fallback (deprecated)
 
 **Lakebase:**
 - `LAKEBASE_PG_HOST` - Postgres host

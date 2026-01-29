@@ -227,10 +227,11 @@ app.post('/api/chat', async (req, res) => {
       })
     }
 
-    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
+    // Use the multi-agent endpoint for chat (has Genie tables and deep research)
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
 
     console.log(`Chat request from user: ${userEmail}`)
-    console.log(`Endpoint: ${endpointUrl}`)
+    console.log(`Endpoint: ${config.databricks.agentEndpoint}`)
     console.log(`Token source: ${source}`)
     console.log(`Messages count: ${messages.length}`)
 
@@ -323,9 +324,11 @@ app.post('/api/chat/stream', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
 
-    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
+    // Use the multi-agent endpoint for streaming chat (has Genie tables and deep research)
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
 
     console.log(`Streaming chat request from user: ${userEmail}`)
+    console.log(`Endpoint: ${config.databricks.agentEndpoint}`)
     console.log(`Token source: ${source}`)
 
     const response = await fetch(endpointUrl, {
@@ -432,9 +435,11 @@ The user's email is: ${userEmail}`
       { role: 'user', content: `Here is the use case context:\n\n${contextBlock}\n\nHere are my raw notes:\n\n${rawNotes}\n\nPlease generate a Salesforce Next Steps update entry.` },
     ]
 
-    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
+    // Use Claude endpoint for Salesforce update generation
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.claudeEndpoint}/invocations`
 
     console.log(`Generate update request from user: ${userEmail}`)
+    console.log(`Endpoint: ${config.databricks.claudeEndpoint}`)
     console.log(`Token source: ${source}`)
 
     const response = await fetch(endpointUrl, {
@@ -554,9 +559,11 @@ Always try to identify at least one potential use case from the discussion.`
       { role: 'user', content: `Please analyze these meeting notes${filename ? ` from file "${filename}"` : ''}:\n\n${meetingNotes}` },
     ]
 
-    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.chatEndpoint}/invocations`
+    // Use Claude endpoint for meeting notes extraction
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.claudeEndpoint}/invocations`
 
     console.log(`Extract use cases request from user: ${userEmail}`)
+    console.log(`Endpoint: ${config.databricks.claudeEndpoint}`)
     console.log(`Token source: ${source}`)
     console.log(`Notes length: ${meetingNotes.length} characters`)
 
