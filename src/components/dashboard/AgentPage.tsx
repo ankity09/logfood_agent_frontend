@@ -23,6 +23,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { databricksConfig } from '../../config'
+import { useToast } from '../../context/ToastContext'
 
 interface Message {
   id: string
@@ -101,6 +102,9 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 export function AgentPage() {
+  // Toast notifications
+  const toast = useToast()
+
   // Session state
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -131,9 +135,12 @@ export function AgentPage() {
       if (res.ok) {
         const data = await res.json()
         setSessions(data)
+      } else {
+        toast.error('Failed to load chat history')
       }
     } catch (err) {
       console.error('Failed to fetch sessions:', err)
+      toast.error('Failed to connect to server')
     } finally {
       setSessionsLoading(false)
     }
@@ -156,11 +163,15 @@ export function AgentPage() {
         }))
         setMessages(loadedMessages)
         setCurrentSessionId(sessionId)
+        toast.info('Conversation loaded')
+      } else {
+        toast.error('Failed to load conversation')
       }
     } catch (err) {
       console.error('Failed to load session:', err)
+      toast.error('Failed to load conversation')
     }
-  }, [])
+  }, [toast])
 
   // Create new session
   const createSession = async (title: string): Promise<string | null> => {
@@ -176,10 +187,14 @@ export function AgentPage() {
       if (res.ok) {
         const session = await res.json()
         setSessions(prev => [session, ...prev])
+        toast.success('New conversation started')
         return session.id
+      } else {
+        toast.error('Failed to create conversation')
       }
     } catch (err) {
       console.error('Failed to create session:', err)
+      toast.error('Failed to create conversation')
     }
     return null
   }
@@ -216,9 +231,13 @@ export function AgentPage() {
         if (currentSessionId === sessionId) {
           startNewChat()
         }
+        toast.success('Conversation deleted')
+      } else {
+        toast.error('Failed to delete conversation')
       }
     } catch (err) {
       console.error('Failed to delete session:', err)
+      toast.error('Failed to delete conversation')
     }
   }
 
@@ -233,6 +252,7 @@ export function AgentPage() {
   const handleCopyMessage = (messageId: string, content: string) => {
     navigator.clipboard.writeText(content)
     setCopiedMessageId(messageId)
+    toast.success('Copied to clipboard')
     setTimeout(() => setCopiedMessageId(null), 2000)
   }
 
