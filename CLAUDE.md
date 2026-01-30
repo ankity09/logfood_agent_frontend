@@ -59,6 +59,16 @@ For local development, run both servers in separate terminals.
   - `migration_v3_chat_sessions.sql` - Create chat persistence tables (chat_sessions, chat_messages)
   - `seed.sql` - Sample data for core tables
   - `seed_chat_sessions.sql` - Sample data for chat history
+- `agent/` - Research agent development (LangGraph + MLflow)
+  - `agent_dev.py` - Main agent module with LangGraph supervisor, Genie integration, and UC function tools
+  - `Logfood_Agent_Dev.ipynb` - Agent development and deployment notebook
+  - `Logfood_Agent_UC_tools.ipynb` - Unity Catalog function tools notebook
+- `genie_tables/` - Databricks Genie Space table definitions
+  - `01_dim_accounts.ipynb` - Account dimension table
+  - `02_dim_use_cases.ipynb` - Use case dimension table
+  - `03_fact_consumption_daily.ipynb` - Daily consumption fact table
+  - `04_fact_consumption_weekly.ipynb` - Weekly aggregated consumption
+  - `05_fact_consumption_monthly.ipynb` - Monthly aggregated consumption
 
 ## Key Patterns
 
@@ -81,6 +91,26 @@ Eight tables in Lakebase:
 Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` → `onboarding` → `live`
 
 Chat message status: `pending` → `processing` → `completed` (or `failed`)
+
+## Research Agent Architecture
+
+The research agent (`agent/agent_dev.py`) is a LangGraph supervisor deployed to Databricks Model Serving.
+
+**Components:**
+- **LLM:** `databricks-gpt-oss-120b` foundation model
+- **Genie Agent:** Queries Delta tables in `ankit_yadav.demo.*` for consumption analytics
+- **UC Function Tools:**
+  - `get_accounts_by_account_executive` - Account lookup by AE name
+  - `get_account_summaries` - AI-powered account analysis
+  - `get_live_date_follow_up_messages` - Generate follow-up messages for use cases
+
+**Middleware Stack:**
+- `TodoListMiddleware` - Planning with write_todos/read_todos
+- `FilesystemMiddleware` - Virtual filesystem, auto-evicts large results (>15K tokens)
+- `SummarizationMiddleware` - Token-aware context management (summarizes at 90K tokens)
+- `PatchToolCallsMiddleware` - Handles dangling tool calls
+
+**Deployment:** MLflow `ResponsesAgent` wrapper with lazy initialization, deployed to endpoint `agents_ankit_yadav-demo-logfood_agent_dev`.
 
 ## Environment Variables
 
