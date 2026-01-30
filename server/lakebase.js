@@ -766,6 +766,7 @@ async function processAIResponse(token, sessionId, assistantMessageId, userEmail
     // Get service principal token for AI call
     const spToken = await getServicePrincipalTokenForBackground()
     const aiToken = spToken || token
+    const tokenSource = spToken ? 'service-principal' : 'user-token'
 
     // Call AI endpoint
     const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
@@ -778,6 +779,10 @@ async function processAIResponse(token, sessionId, assistantMessageId, userEmail
     }
 
     console.log(`[Background] Processing AI for session ${sessionId}, message ${assistantMessageId}`)
+    console.log(`[Background] Token source: ${tokenSource}`)
+    console.log(`[Background] Endpoint: ${endpointUrl}`)
+    console.log(`[Background] Chat history length: ${chatHistory.length} messages`)
+    console.log(`[Background] Payload:`, JSON.stringify(agentPayload, null, 2))
 
     const response = await fetch(endpointUrl, {
       method: 'POST',
@@ -793,6 +798,7 @@ async function processAIResponse(token, sessionId, assistantMessageId, userEmail
 
     if (response.ok) {
       let data = await response.json()
+      console.log(`[Background] Response received, type: ${typeof data}, isArray: ${Array.isArray(data)}`)
 
       // Parse response (same logic as /api/chat)
       if (typeof data === 'string') {
@@ -800,15 +806,24 @@ async function processAIResponse(token, sessionId, assistantMessageId, userEmail
       }
 
       if (!Array.isArray(data) && data && typeof data === 'object') {
-        if (Array.isArray(data.output)) data = data.output
-        else if (Array.isArray(data.messages)) data = data.messages
-        else if (Array.isArray(data.result)) data = data.result
+        if (Array.isArray(data.output)) {
+          data = data.output
+          console.log(`[Background] Extracted data from .output`)
+        } else if (Array.isArray(data.messages)) {
+          data = data.messages
+          console.log(`[Background] Extracted data from .messages`)
+        } else if (Array.isArray(data.result)) {
+          data = data.result
+          console.log(`[Background] Extracted data from .result`)
+        }
       }
 
       if (Array.isArray(data)) {
+        console.log(`[Background] Processing array response, ${data.length} items`)
         const assistantMessages = data.filter(
           item => item.type === 'message' && item.role === 'assistant'
         )
+        console.log(`[Background] Found ${assistantMessages.length} assistant messages`)
         const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
 
         if (lastAssistantMessage?.content) {
@@ -820,14 +835,29 @@ async function processAIResponse(token, sessionId, assistantMessageId, userEmail
           if (textContent) {
             assistantContent = textContent
             finalStatus = 'completed'
+            console.log(`[Background] Extracted text content, length: ${textContent.length}`)
+          } else {
+            console.log(`[Background] No text content found in assistant message`)
+            console.log(`[Background] Content types:`, lastAssistantMessage.content.map(c => c.type))
+          }
+        } else {
+          console.log(`[Background] Last assistant message has no content`)
+          if (lastAssistantMessage) {
+            console.log(`[Background] Last message keys:`, Object.keys(lastAssistantMessage))
           }
         }
       } else if (data.choices?.[0]?.message?.content) {
         assistantContent = data.choices[0].message.content
         finalStatus = 'completed'
+        console.log(`[Background] Used OpenAI format, content length: ${assistantContent.length}`)
       } else if (data.output) {
         assistantContent = typeof data.output === 'string' ? data.output : JSON.stringify(data.output)
         finalStatus = 'completed'
+        console.log(`[Background] Used direct output format`)
+      } else {
+        console.log(`[Background] Could not extract content from response`)
+        console.log(`[Background] Response keys:`, Object.keys(data || {}))
+        console.log(`[Background] Response preview:`, JSON.stringify(data).substring(0, 500))
       }
     } else {
       const errorText = await response.text()
