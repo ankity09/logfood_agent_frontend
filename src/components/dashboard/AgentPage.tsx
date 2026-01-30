@@ -121,6 +121,9 @@ export function AgentPage() {
   const [processingMessageId, setProcessingMessageId] = useState<string | null>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Session restoration tracking
+  const hasAttemptedRestore = useRef(false)
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -258,18 +261,37 @@ export function AgentPage() {
 
   // Fetch sessions on mount
   useEffect(() => {
+    // Reset restoration flag when component mounts
+    hasAttemptedRestore.current = false
     fetchSessions()
   }, [])
 
   // Restore last session after sessions are loaded
   useEffect(() => {
-    if (!sessionsLoading && !currentSessionId) {
-      const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY)
-      if (savedSessionId) {
-        const sessionExists = sessions.some(s => s.id === savedSessionId)
-        if (sessionExists) {
-          loadSession(savedSessionId)
-        }
+    // Only attempt restoration once per mount
+    if (sessionsLoading || hasAttemptedRestore.current) {
+      return
+    }
+
+    hasAttemptedRestore.current = true
+
+    const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY)
+    console.log('[AgentPage] Restoration check:', {
+      savedSessionId,
+      sessionsCount: sessions.length,
+      currentSessionId
+    })
+
+    if (savedSessionId && !currentSessionId) {
+      const sessionExists = sessions.some(s => s.id === savedSessionId)
+      console.log('[AgentPage] Session exists:', sessionExists)
+
+      if (sessionExists) {
+        console.log('[AgentPage] Restoring session:', savedSessionId)
+        loadSession(savedSessionId)
+      } else {
+        console.log('[AgentPage] Saved session not found in list, clearing localStorage')
+        localStorage.removeItem(CURRENT_SESSION_KEY)
       }
     }
   }, [sessionsLoading, sessions, currentSessionId, loadSession])
