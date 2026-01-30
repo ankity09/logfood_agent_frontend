@@ -55,8 +55,10 @@ For local development, run both servers in separate terminals.
   - `config.js` - Environment variable configuration
   - `lakebase.js` - Postgres data routes
 - `db/` - Database schema
-  - `migration.sql` - Create tables (accounts, users, use_cases, meeting_notes, extracted_use_cases, activities)
-  - `seed.sql` - Sample data
+  - `migration.sql` - Create core tables (accounts, users, use_cases, meeting_notes, extracted_use_cases, activities)
+  - `migration_v3_chat_sessions.sql` - Create chat persistence tables (chat_sessions, chat_messages)
+  - `seed.sql` - Sample data for core tables
+  - `seed_chat_sessions.sql` - Sample data for chat history
 
 ## Key Patterns
 
@@ -72,9 +74,13 @@ For local development, run both servers in separate terminals.
 
 ## Database Schema
 
-Six tables in Lakebase: `accounts`, `users`, `use_cases`, `meeting_notes`, `extracted_use_cases`, `activities`
+Eight tables in Lakebase:
+- `accounts`, `users`, `use_cases`, `meeting_notes`, `extracted_use_cases`, `activities`
+- `chat_sessions`, `chat_messages` (Research Agent conversation history)
 
 Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` → `onboarding` → `live`
+
+Chat message status: `pending` → `processing` → `completed` (or `failed`)
 
 ## Environment Variables
 
