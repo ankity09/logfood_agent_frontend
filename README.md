@@ -44,9 +44,10 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 | Tab | Description |
 |---|---|
 | **Overview** | Dashboard with pipeline stats, stage counts, and recent activity |
-| **Agent** | AI chat interface backed by a Databricks Model Serving endpoint |
-| **Use Cases** | Filterable pipeline of sales use cases with stage/service/search filters |
-| **Meeting Notes** | Uploaded meeting notes with AI-extracted use cases |
+| **Research Agent** | Full-featured AI chat with persistent conversation history, session management, and async processing |
+| **Use Cases** | Filterable pipeline of sales use cases with stage/service/search filters and Go-Live view |
+| **Meeting Notes** | Uploaded meeting notes with AI-extracted use cases and Salesforce update generation |
+| **Documentation** | Help, architecture overview, and feature documentation |
 
 ## Project Structure
 
@@ -68,8 +69,10 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 │   ├── 04_fact_consumption_weekly.ipynb
 │   └── 05_fact_consumption_monthly.ipynb
 ├── db/
-│   ├── migration.sql         # Schema DDL + seed data
-│   └── seed.sql              # Standalone seed data (idempotent)
+│   ├── migration.sql                  # Core schema DDL + seed data
+│   ├── migration_v3_chat_sessions.sql # Chat persistence schema (sessions, messages)
+│   ├── seed.sql                       # Standalone seed data (idempotent)
+│   └── seed_chat_sessions.sql         # Sample chat conversations
 ├── server/
 │   ├── index.js              # Express server entry point
 │   ├── config.js             # Centralized config (env vars)
@@ -89,7 +92,7 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 
 ## Database Schema
 
-Six tables in Lakebase (`databricks_postgres`):
+Eight tables in Lakebase (`databricks_postgres`):
 
 | Table | Description |
 |---|---|
@@ -99,8 +102,12 @@ Six tables in Lakebase (`databricks_postgres`):
 | `meeting_notes` | Uploaded meeting documents with summaries |
 | `extracted_use_cases` | AI-extracted use cases linked to meeting notes |
 | `activities` | Activity feed (meetings, use-case changes, notes) |
+| `chat_sessions` | Conversation threads with user, title, timestamps |
+| `chat_messages` | Individual messages with role, content, and processing status |
 
 Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` → `onboarding` → `live`
+
+Message status: `pending` → `processing` → `completed` (or `failed`)
 
 ## Research Agent
 
@@ -121,6 +128,27 @@ The research/chat functionality is powered by a LangGraph multi-agent supervisor
 - `PatchToolCallsMiddleware` - Handles dangling tool calls
 
 **Deployment**: MLflow `ResponsesAgent` wrapper → Model Serving endpoint
+
+## Chat Session Persistence
+
+The Research Agent page features full conversation persistence with async processing:
+
+**Features:**
+- **Session Management**: Create, rename, delete, and switch between up to 30 conversations
+- **Message Persistence**: All user and assistant messages saved to Lakebase
+- **Async Processing**: Backend processes AI responses in background, frontend polls for completion
+- **Session Restoration**: Last session automatically restored on page reload
+- **Status Tracking**: Messages track status (pending → processing → completed/failed)
+
+**Flow:**
+1. User sends message → `POST /api/chat-sessions/:id/chat`
+2. Backend saves user message (completed) + assistant placeholder (processing)
+3. Backend returns HTTP 202 with message IDs
+4. Frontend polls `GET /api/chat-messages/:id/status` every 2 seconds
+5. Backend processes AI in background, updates assistant message
+6. Frontend detects completion, updates UI, stops polling
+
+**Resilience**: If user navigates away during processing, polling resumes on return.
 
 ## Genie Space Tables
 
@@ -167,13 +195,21 @@ npm run dev:server
 ## Database Setup
 
 1. Create a Lakebase Autoscaling instance in your Databricks workspace.
-2. Run the migration to create tables:
+2. Run the migrations to create tables:
    ```bash
+   # Core tables
    psql "postgresql://user@host:5432/databricks_postgres?sslmode=require" -f db/migration.sql
-   ```
-   Or paste the contents of `db/migration.sql` into the Lakebase SQL editor.
 
-3. If seed data was not included in the migration, run `db/seed.sql` separately via the SQL editor.
+   # Chat session tables
+   psql "postgresql://user@host:5432/databricks_postgres?sslmode=require" -f db/migration_v3_chat_sessions.sql
+   ```
+   Or paste the contents into the Lakebase SQL editor.
+
+3. Optionally seed with sample data:
+   ```bash
+   psql ... -f db/seed.sql                # Core sample data
+   psql ... -f db/seed_chat_sessions.sql  # Sample conversations
+   ```
 
 ## Building for Production
 
@@ -202,24 +238,68 @@ This compiles TypeScript and builds the Vite frontend into `dist/`. The Express 
 
 ## API Endpoints
 
+### Core APIs
+
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/health` | Health check |
 | `GET` | `/api/user` | Current user info |
 | `POST` | `/api/auth/dashboard-token` | Get token for dashboard embedding |
-| `POST` | `/api/chat` | Chat with AI |
-| `POST` | `/api/chat/stream` | Streaming chat |
+| `GET` | `/api/stats` | Aggregated dashboard stats |
+
+### Use Cases & Accounts
+
+| Method | Path | Description |
+|---|---|---|
 | `GET` | `/api/use-cases` | List use cases (filters: `stage`, `service`, `date`, `search`) |
 | `GET` | `/api/use-cases/:id` | Get single use case |
 | `POST` | `/api/use-cases` | Create use case |
 | `PATCH` | `/api/use-cases/:id` | Update use case |
 | `GET` | `/api/accounts` | List accounts |
+| `POST` | `/api/accounts` | Create account |
+
+### Meeting Notes & AI Extraction
+
+| Method | Path | Description |
+|---|---|---|
 | `GET` | `/api/meeting-notes` | List meeting notes with extracted use cases |
 | `POST` | `/api/meeting-notes` | Create meeting note |
-| `POST` | `/api/extracted-use-cases` | Create extracted use case |
+| `POST` | `/api/extracted-use-cases` | Save AI-extracted use case |
+| `POST` | `/api/extract-use-cases` | AI extraction from raw notes (Claude Haiku) |
+| `POST` | `/api/generate-update` | Generate Salesforce update from notes (Claude Haiku) |
+
+### Activities
+
+| Method | Path | Description |
+|---|---|---|
 | `GET` | `/api/activities` | Recent activities (query: `limit`) |
 | `POST` | `/api/activities` | Create activity |
-| `GET` | `/api/stats` | Aggregated dashboard stats |
+
+### Chat Sessions (Persistent Conversations)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/chat-sessions` | List user's sessions (max 30, most recent first) |
+| `POST` | `/api/chat-sessions` | Create new session |
+| `GET` | `/api/chat-sessions/:id` | Get session with all messages |
+| `PATCH` | `/api/chat-sessions/:id` | Update session title |
+| `DELETE` | `/api/chat-sessions/:id` | Delete session (cascades to messages) |
+| `POST` | `/api/chat-sessions/:id/chat` | Send message & get AI response (async) |
+
+### Chat Messages
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/chat-sessions/:id/messages` | Add message to session |
+| `GET` | `/api/chat-messages/:id/status` | Poll for message completion status |
+| `PATCH` | `/api/chat-messages/:id` | Update message content/status |
+
+### Legacy Chat (Non-persistent)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/chat` | Chat with AI (single response) |
+| `POST` | `/api/chat/stream` | Streaming chat with SSE |
 
 ## Lakebase Connection Details
 
