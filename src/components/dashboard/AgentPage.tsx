@@ -9,8 +9,6 @@ import {
   User,
   AlertCircle,
   Paperclip,
-  Mic,
-  Image,
   FileText,
   X,
   Copy,
@@ -21,6 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  RotateCcw,
+  Eraser,
 } from 'lucide-react'
 import { databricksConfig } from '../../config'
 import { useToast } from '../../context/ToastContext'
@@ -492,6 +492,45 @@ export function AgentPage() {
     inputRef.current?.focus()
   }
 
+  // Retry last user message
+  const retryLastMessage = async () => {
+    // Find the last user message
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')
+    if (!lastUserMessage || isTyping) return
+
+    // Remove any error messages after the last user message
+    const lastUserIndex = messages.findIndex(m => m.id === lastUserMessage.id)
+    const messagesUpToLastUser = messages.slice(0, lastUserIndex)
+    setMessages(messagesUpToLastUser)
+
+    // Set the input to the last message content and send
+    setInput(lastUserMessage.content)
+    // Use setTimeout to ensure state is updated before sending
+    setTimeout(() => {
+      handleSend()
+    }, 0)
+  }
+
+  // Clear current chat (start fresh in same session or new session)
+  const clearCurrentChat = () => {
+    // Stop any polling
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+    setProcessingMessageId(null)
+    setIsTyping(false)
+    setMessages([])
+    setInput('')
+    // Keep the current session but clear messages locally
+    // User can start fresh in the same session
+    toast.info('Chat cleared')
+    inputRef.current?.focus()
+  }
+
+  // Check if we can retry (has user messages and not currently typing)
+  const canRetry = messages.some(m => m.role === 'user') && !isTyping
+
   // Check if current view is a fresh conversation (no messages yet)
   const isNewConversation = messages.length === 0
 
@@ -784,16 +823,20 @@ export function AgentPage() {
                   <Paperclip className="w-5 h-5" />
                 </button>
                 <button
-                  className="p-2.5 text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle rounded-lg transition-colors"
-                  title="Upload image"
+                  onClick={retryLastMessage}
+                  disabled={!canRetry}
+                  className="p-2.5 text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Retry last message"
                 >
-                  <Image className="w-5 h-5" />
+                  <RotateCcw className="w-5 h-5" />
                 </button>
                 <button
-                  className="p-2.5 text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle rounded-lg transition-colors"
-                  title="Voice input"
+                  onClick={clearCurrentChat}
+                  disabled={messages.length === 0}
+                  className="p-2.5 text-theme-secondary hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Clear chat"
                 >
-                  <Mic className="w-5 h-5" />
+                  <Eraser className="w-5 h-5" />
                 </button>
               </div>
 
