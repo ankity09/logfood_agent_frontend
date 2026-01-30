@@ -680,6 +680,265 @@ router.post('/chat-sessions/:id/messages', async (req, res) => {
 })
 
 /**
+ * POST /api/chat-sessions/:id/chat
+ * Send a message and get AI response (processes in background)
+ * Returns immediately with message IDs, AI processes asynchronously
+ */
+router.post('/chat-sessions/:id/chat', async (req, res) => {
+  const token = req.userToken
+  if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+  const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+  const { content } = req.body
+
+  if (!content) {
+    return res.status(400).json({ error: 'content is required' })
+  }
+
+  try {
+    // Verify session ownership
+    const sessionCheck = await query(
+      token,
+      'SELECT id, title FROM chat_sessions WHERE id = $1 AND user_email = $2',
+      [req.params.id, userEmail]
+    )
+
+    if (sessionCheck.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    // Save user message
+    const userMsgResult = await query(token, `
+      INSERT INTO chat_messages (session_id, role, content, status)
+      VALUES ($1, 'user', $2, 'completed')
+      RETURNING id, session_id, role, content, status, created_at
+    `, [req.params.id, content])
+
+    const userMessage = userMsgResult[0]
+
+    // Create placeholder for assistant response (processing status)
+    const assistantMsgResult = await query(token, `
+      INSERT INTO chat_messages (session_id, role, content, status)
+      VALUES ($1, 'assistant', '', 'processing')
+      RETURNING id, session_id, role, content, status, created_at
+    `, [req.params.id])
+
+    const assistantMessage = assistantMsgResult[0]
+
+    // Return immediately with message IDs
+    res.status(202).json({
+      userMessage,
+      assistantMessage,
+      status: 'processing',
+    })
+
+    // Process AI response in background (don't await)
+    processAIResponse(token, req.params.id, assistantMessage.id, userEmail).catch(err => {
+      console.error('Background AI processing error:', err)
+    })
+
+  } catch (error) {
+    console.error('POST /api/chat-sessions/:id/chat error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * Background AI processing function
+ * Called after returning response to client
+ */
+async function processAIResponse(token, sessionId, assistantMessageId, userEmail) {
+  try {
+    // Get all messages in session for context
+    const messagesResult = await query(token, `
+      SELECT role, content FROM chat_messages
+      WHERE session_id = $1 AND status = 'completed'
+      ORDER BY created_at ASC
+    `, [sessionId])
+
+    const chatHistory = messagesResult
+      .filter(m => m.role !== 'error')
+      .map(m => ({ role: m.role, content: m.content }))
+
+    // Import config dynamically (we're in a module)
+    const { config } = await import('./config.js')
+
+    // Get service principal token for AI call
+    const spToken = await getServicePrincipalTokenForBackground()
+    const aiToken = spToken || token
+
+    // Call AI endpoint
+    const endpointUrl = `${config.databricks.instanceUrl}/serving-endpoints/${config.databricks.agentEndpoint}/invocations`
+
+    const agentPayload = {
+      input: chatHistory,
+      max_output_tokens: config.chat.agentMaxTokens,
+      temperature: config.chat.temperature,
+      context: { user_id: userEmail },
+    }
+
+    console.log(`[Background] Processing AI for session ${sessionId}, message ${assistantMessageId}`)
+
+    const response = await fetch(endpointUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${aiToken}`,
+      },
+      body: JSON.stringify(agentPayload),
+    })
+
+    let assistantContent = 'I encountered an error processing your request.'
+    let finalStatus = 'failed'
+
+    if (response.ok) {
+      let data = await response.json()
+
+      // Parse response (same logic as /api/chat)
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data) } catch (e) { /* ignore */ }
+      }
+
+      if (!Array.isArray(data) && data && typeof data === 'object') {
+        if (Array.isArray(data.output)) data = data.output
+        else if (Array.isArray(data.messages)) data = data.messages
+        else if (Array.isArray(data.result)) data = data.result
+      }
+
+      if (Array.isArray(data)) {
+        const assistantMessages = data.filter(
+          item => item.type === 'message' && item.role === 'assistant'
+        )
+        const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
+
+        if (lastAssistantMessage?.content) {
+          const textContent = lastAssistantMessage.content
+            .filter(c => c.type === 'output_text' || c.type === 'text')
+            .map(c => c.text)
+            .join('\n\n')
+
+          if (textContent) {
+            assistantContent = textContent
+            finalStatus = 'completed'
+          }
+        }
+      } else if (data.choices?.[0]?.message?.content) {
+        assistantContent = data.choices[0].message.content
+        finalStatus = 'completed'
+      } else if (data.output) {
+        assistantContent = typeof data.output === 'string' ? data.output : JSON.stringify(data.output)
+        finalStatus = 'completed'
+      }
+    } else {
+      const errorText = await response.text()
+      console.error(`[Background] AI API error (${response.status}):`, errorText)
+      assistantContent = 'I apologize, but I encountered an error connecting to the AI service. Please try again.'
+      finalStatus = 'failed'
+    }
+
+    // Update the assistant message with the response
+    await query(token, `
+      UPDATE chat_messages
+      SET content = $1, status = $2
+      WHERE id = $3
+    `, [assistantContent, finalStatus, assistantMessageId])
+
+    console.log(`[Background] Completed AI processing for message ${assistantMessageId}, status: ${finalStatus}`)
+
+  } catch (error) {
+    console.error('[Background] AI processing error:', error)
+
+    // Update message to failed status
+    try {
+      await query(token, `
+        UPDATE chat_messages
+        SET content = $1, status = 'failed'
+        WHERE id = $2
+      `, ['I encountered an error processing your request. Please try again.', assistantMessageId])
+    } catch (updateError) {
+      console.error('[Background] Failed to update message status:', updateError)
+    }
+  }
+}
+
+/**
+ * Get service principal token for background processing
+ * Simplified version that reuses the cached token
+ */
+let bgSpTokenCache = { token: null, expiresAt: 0 }
+
+async function getServicePrincipalTokenForBackground() {
+  if (bgSpTokenCache.token && Date.now() < bgSpTokenCache.expiresAt - 60000) {
+    return bgSpTokenCache.token
+  }
+
+  const clientId = process.env.DATABRICKS_CLIENT_ID
+  const clientSecret = process.env.DATABRICKS_CLIENT_SECRET
+
+  if (!clientId || !clientSecret) {
+    return null
+  }
+
+  try {
+    const { config } = await import('./config.js')
+    const tokenUrl = `${config.databricks.instanceUrl}/oidc/v1/token`
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: 'all-apis',
+      }),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      bgSpTokenCache.token = data.access_token
+      bgSpTokenCache.expiresAt = Date.now() + (data.expires_in || 3600) * 1000
+      return bgSpTokenCache.token
+    }
+  } catch (error) {
+    console.error('[Background] Token error:', error.message)
+  }
+
+  return null
+}
+
+/**
+ * GET /api/chat-messages/:id/status
+ * Check status of a specific message (for polling)
+ */
+router.get('/chat-messages/:id/status', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+
+    const sql = `
+      SELECT cm.id, cm.role, cm.content, cm.status, cm.created_at
+      FROM chat_messages cm
+      JOIN chat_sessions cs ON cm.session_id = cs.id
+      WHERE cm.id = $1 AND cs.user_email = $2
+    `
+
+    const rows = await query(token, sql, [req.params.id, userEmail])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    console.error('GET /api/chat-messages/:id/status error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
  * PATCH /api/chat-messages/:id
  * Update a message (e.g., change status from 'processing' to 'completed')
  */

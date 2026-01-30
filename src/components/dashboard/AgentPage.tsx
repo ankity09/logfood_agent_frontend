@@ -25,17 +25,16 @@ import {
 import { databricksConfig } from '../../config'
 import { useToast } from '../../context/ToastContext'
 
+// Storage key for persisting current session
+const CURRENT_SESSION_KEY = 'logfood_agent_current_session'
+
 interface Message {
   id: string
   content: string
   role: 'user' | 'assistant' | 'error'
+  status?: 'pending' | 'processing' | 'completed' | 'failed'
   timestamp: Date
   attachments?: { name: string; type: string }[]
-}
-
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
 }
 
 interface ChatSession {
@@ -49,7 +48,7 @@ interface ApiMessage {
   id: string
   role: 'user' | 'assistant' | 'error'
   content: string
-  status: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
   created_at: string
 }
 
@@ -118,14 +117,36 @@ export function AgentPage() {
   const [attachments, setAttachments] = useState<{ name: string; type: string }[]>([])
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
 
+  // Polling state
+  const [processingMessageId, setProcessingMessageId] = useState<string | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Fetch sessions on mount
+  // Persist current session ID to localStorage
+  useEffect(() => {
+    if (currentSessionId) {
+      localStorage.setItem(CURRENT_SESSION_KEY, currentSessionId)
+    } else {
+      localStorage.removeItem(CURRENT_SESSION_KEY)
+    }
+  }, [currentSessionId])
+
+  // Fetch sessions on mount and restore last session
   useEffect(() => {
     fetchSessions()
+  }, [])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
   }, [])
 
   const fetchSessions = async () => {
@@ -135,6 +156,12 @@ export function AgentPage() {
       if (res.ok) {
         const data = await res.json()
         setSessions(data)
+
+        // Restore last session if exists
+        const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY)
+        if (savedSessionId && data.some((s: ChatSession) => s.id === savedSessionId)) {
+          loadSession(savedSessionId)
+        }
       } else {
         toast.error('Failed to load chat history')
       }
@@ -146,6 +173,61 @@ export function AgentPage() {
     }
   }
 
+  // Poll for message status
+  const pollMessageStatus = useCallback(async (messageId: string) => {
+    try {
+      const res = await fetch(
+        `${databricksConfig.api.baseUrl}${databricksConfig.api.chatMessagesEndpoint}/${messageId}/status`
+      )
+      if (res.ok) {
+        const data: ApiMessage = await res.json()
+
+        if (data.status === 'completed' || data.status === 'failed') {
+          // Update message with final content
+          setMessages(prev => prev.map(m =>
+            m.id === messageId
+              ? { ...m, content: data.content, status: data.status, role: data.status === 'failed' ? 'error' : m.role }
+              : m
+          ))
+
+          // Stop polling
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+          setProcessingMessageId(null)
+          setIsTyping(false)
+
+          if (data.status === 'completed') {
+            toast.success('Response received')
+          } else {
+            toast.error('Failed to get response')
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Polling error:', err)
+    }
+  }, [toast])
+
+  // Start polling for a message
+  const startPolling = useCallback((messageId: string) => {
+    setProcessingMessageId(messageId)
+
+    // Clear any existing polling
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
+    // Poll every 2 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      pollMessageStatus(messageId)
+    }, 2000)
+
+    // Also poll immediately
+    pollMessageStatus(messageId)
+  }, [pollMessageStatus])
+
   // Load session messages
   const loadSession = useCallback(async (sessionId: string) => {
     try {
@@ -154,16 +236,28 @@ export function AgentPage() {
       )
       if (res.ok) {
         const data = await res.json()
+
         // Convert API messages to local format
         const loadedMessages: Message[] = data.messages.map((m: ApiMessage) => ({
           id: m.id,
           content: m.content,
-          role: m.role,
+          role: m.status === 'failed' ? 'error' : m.role,
+          status: m.status,
           timestamp: new Date(m.created_at),
         }))
+
         setMessages(loadedMessages)
         setCurrentSessionId(sessionId)
-        toast.info('Conversation loaded')
+
+        // Check if there's a processing message
+        const processingMsg = loadedMessages.find(m => m.status === 'processing')
+        if (processingMsg) {
+          setIsTyping(true)
+          startPolling(processingMsg.id)
+          toast.info('Resuming conversation - waiting for response...')
+        } else {
+          toast.info('Conversation loaded')
+        }
       } else {
         toast.error('Failed to load conversation')
       }
@@ -171,7 +265,7 @@ export function AgentPage() {
       console.error('Failed to load session:', err)
       toast.error('Failed to load conversation')
     }
-  }, [toast])
+  }, [toast, startPolling])
 
   // Create new session
   const createSession = async (title: string): Promise<string | null> => {
@@ -199,26 +293,6 @@ export function AgentPage() {
     return null
   }
 
-  // Save message to session
-  const saveMessage = async (
-    sessionId: string,
-    role: 'user' | 'assistant' | 'error',
-    content: string
-  ) => {
-    try {
-      await fetch(
-        `${databricksConfig.api.baseUrl}${databricksConfig.api.chatSessionsEndpoint}/${sessionId}/messages`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role, content, status: 'completed' }),
-        }
-      )
-    } catch (err) {
-      console.error('Failed to save message:', err)
-    }
-  }
-
   // Delete session
   const deleteSession = async (sessionId: string) => {
     try {
@@ -243,6 +317,13 @@ export function AgentPage() {
 
   // Start new chat
   const startNewChat = () => {
+    // Stop any polling
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
+    }
+    setProcessingMessageId(null)
+    setIsTyping(false)
     setCurrentSessionId(null)
     setMessages([])
     setInput('')
@@ -270,28 +351,11 @@ export function AgentPage() {
     }
   }, [])
 
-  const getChatHistory = (): ChatMessage[] => {
-    return messages
-      .filter((m) => m.role !== 'error')
-      .map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }))
-  }
-
   const handleSend = async () => {
     if (!input.trim() || isTyping) return
 
     const userContent = input.trim()
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: userContent,
-      role: 'user',
-      timestamp: new Date(),
-      attachments: attachments.length > 0 ? [...attachments] : undefined,
-    }
 
-    setMessages((prev) => [...prev, userMessage])
     setInput('')
     setAttachments([])
     setIsTyping(true)
@@ -301,26 +365,21 @@ export function AgentPage() {
     if (!sessionId) {
       const title = extractTitle(userContent)
       sessionId = await createSession(title)
-      if (sessionId) {
-        setCurrentSessionId(sessionId)
+      if (!sessionId) {
+        setIsTyping(false)
+        return
       }
-    }
-
-    // Save user message to session
-    if (sessionId) {
-      await saveMessage(sessionId, 'user', userContent)
+      setCurrentSessionId(sessionId)
     }
 
     try {
-      const chatHistory = getChatHistory()
-      chatHistory.push({ role: 'user', content: userContent })
-
+      // Call the backend chat endpoint which handles everything
       const response = await fetch(
-        `${databricksConfig.api.baseUrl}${databricksConfig.api.chatEndpoint}`,
+        `${databricksConfig.api.baseUrl}${databricksConfig.api.chatSessionsEndpoint}/${sessionId}/chat`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: chatHistory }),
+          body: JSON.stringify({ content: userContent }),
         }
       )
 
@@ -329,40 +388,44 @@ export function AgentPage() {
       }
 
       const data = await response.json()
-      const aiContent = data.message || 'I received your message but could not generate a response.'
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: aiContent,
+      // Add user message to UI
+      const userMessage: Message = {
+        id: data.userMessage.id,
+        content: data.userMessage.content,
+        role: 'user',
+        status: 'completed',
+        timestamp: new Date(data.userMessage.created_at),
+        attachments: attachments.length > 0 ? [...attachments] : undefined,
+      }
+
+      // Add processing assistant message to UI
+      const assistantMessage: Message = {
+        id: data.assistantMessage.id,
+        content: '',
         role: 'assistant',
-        timestamp: new Date(),
+        status: 'processing',
+        timestamp: new Date(data.assistantMessage.created_at),
       }
 
-      setMessages((prev) => [...prev, aiMessage])
+      setMessages(prev => [...prev, userMessage, assistantMessage])
 
-      // Save assistant message to session
-      if (sessionId) {
-        await saveMessage(sessionId, 'assistant', aiContent)
-      }
+      // Start polling for the response
+      startPolling(data.assistantMessage.id)
+
     } catch (error) {
       console.error('Chat error:', error)
+      setIsTyping(false)
+      toast.error('Failed to send message')
 
-      const errorContent = 'I apologize, but I encountered an error connecting to the AI service. Please try again later.'
+      // Add error message to UI
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: errorContent,
+        id: Date.now().toString(),
+        content: 'Failed to send message. Please try again.',
         role: 'error',
         timestamp: new Date(),
       }
-
-      setMessages((prev) => [...prev, errorMessage])
-
-      // Save error to session
-      if (sessionId) {
-        await saveMessage(sessionId, 'error', errorContent)
-      }
-    } finally {
-      setIsTyping(false)
+      setMessages(prev => [...prev, errorMessage])
     }
   }
 
@@ -514,6 +577,12 @@ export function AgentPage() {
                 : 'Your intelligent assistant for deep account research and analysis.'}
             </p>
           </div>
+          {processingMessageId && (
+            <div className="flex items-center gap-2 text-sm text-primary">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Processing...
+            </div>
+          )}
         </motion.div>
 
         {/* Chat Container */}
@@ -578,7 +647,7 @@ export function AgentPage() {
                     }`}
                   >
                     {/* Copy button for assistant messages */}
-                    {message.role === 'assistant' && (
+                    {message.role === 'assistant' && message.content && (
                       <button
                         onClick={() => handleCopyMessage(message.id, message.content)}
                         className="absolute top-2 right-2 p-1.5 rounded-lg bg-theme-subtle/50 text-theme-muted hover:text-theme-primary hover:bg-theme-subtle opacity-0 group-hover:opacity-100 transition-all"
@@ -591,7 +660,12 @@ export function AgentPage() {
                         )}
                       </button>
                     )}
-                    {message.role === 'assistant' ? (
+                    {message.status === 'processing' ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span className="text-sm text-theme-muted">Thinking...</span>
+                      </div>
+                    ) : message.role === 'assistant' ? (
                       <div className="text-sm leading-relaxed prose prose-sm prose-invert max-w-none prose-headings:text-theme-primary prose-p:text-theme-primary prose-strong:text-theme-primary prose-li:text-theme-secondary prose-table:text-xs prose-th:text-theme-primary prose-td:text-theme-secondary prose-code:text-primary prose-code:bg-theme-subtle prose-code:px-1 prose-code:rounded pr-8">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {message.content}
@@ -619,26 +693,6 @@ export function AgentPage() {
                 </div>
               </motion.div>
             ))}
-
-            {/* Typing indicator */}
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex gap-4"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-neon-blue/20 flex items-center justify-center text-primary">
-                  <Bot className="w-5 h-5" />
-                </div>
-                <div className="bg-theme-elevated px-5 py-4 rounded-2xl rounded-tl-sm">
-                  <div className="flex gap-1.5">
-                    <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" />
-                    <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:0.1s]" />
-                    <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce [animation-delay:0.2s]" />
-                  </div>
-                </div>
-              </motion.div>
-            )}
 
             {/* Suggested prompts (show only for new conversations) */}
             {isNewConversation && (

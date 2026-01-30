@@ -67,6 +67,7 @@ export const databricksConfig = {
     // Chat session persistence endpoints
     chatSessionsEndpoint: '/chat-sessions',
     chatMessagesEndpoint: '/chat-messages',
+    chatMessageStatusEndpoint: '/chat-messages', // GET /:id/status
   },
 
   // UI Configuration
