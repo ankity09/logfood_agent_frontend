@@ -5,26 +5,36 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Databricks App                    │
-│                                                     │
-│  ┌──────────────┐        ┌───────────────────────┐  │
-│  │  React SPA   │──API──▶│    Express Server     │  │
-│  │  (Vite+TS)   │        │    (server/index.js)  │  │
-│  └──────────────┘        └───┬──────────┬────────┘  │
-│                              │          │           │
-└──────────────────────────────┼──────────┼───────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        Databricks App                            │
+│  ┌──────────────┐        ┌───────────────────────┐               │
+│  │  React SPA   │──API──▶│    Express Server     │               │
+│  │  (Vite+TS)   │        │    (server/index.js)  │               │
+│  └──────────────┘        └───┬──────────┬────────┘               │
+└──────────────────────────────┼──────────┼────────────────────────┘
                                │          │
-                    ┌──────────▼──┐  ┌────▼──────────────┐
-                    │  Lakebase   │  │ Model Serving      │
-                    │  (Postgres) │  │ (Chat Endpoint)    │
-                    └─────────────┘  └────────────────────┘
+                    ┌──────────▼──┐  ┌────▼──────────────────────┐
+                    │  Lakebase   │  │ Model Serving             │
+                    │  (Postgres) │  │ (LangGraph Agent)         │
+                    └─────────────┘  └────┬──────────────────────┘
+                                          │
+                          ┌───────────────┼───────────────┐
+                          │               │               │
+                    ┌─────▼─────┐  ┌──────▼──────┐  ┌─────▼─────┐
+                    │  Genie    │  │ UC Functions│  │  Claude   │
+                    │  Space    │  │ (Tools)     │  │  Haiku    │
+                    └─────┬─────┘  └─────────────┘  └───────────┘
+                          │
+                    ┌─────▼─────┐
+                    │ Delta Lake│
+                    │ (Unity)   │
+                    └───────────┘
 ```
 
 - **Frontend**: React 18 + TypeScript + Tailwind CSS + Framer Motion
 - **Backend**: Express.js serving the SPA and API routes
 - **Database**: Databricks Lakebase (Postgres-compatible, autoscaling)
-- **AI Chat**: Proxied through Databricks Model Serving (Claude Haiku 4.5)
+- **AI Chat**: Multi-agent supervisor (LangGraph) + Claude Haiku 4.5 for extraction
 - **Auth**: On-behalf-of-user via `X-Forwarded-Access-Token` (Databricks Apps)
 
 ## Pages
@@ -45,6 +55,16 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 ├── vite.config.ts
 ├── tailwind.config.js
 ├── tsconfig.json
+├── agent/                    # Research agent (LangGraph + MLflow)
+│   ├── agent_dev.py          # Main agent module
+│   ├── Logfood_Agent_Dev.ipynb        # Agent development notebook
+│   └── Logfood_Agent_UC_tools.ipynb   # UC function tools notebook
+├── genie_tables/             # Databricks Genie Space tables
+│   ├── 01_dim_accounts.ipynb          # Account dimension
+│   ├── 02_dim_use_cases.ipynb         # Use case dimension
+│   ├── 03_fact_consumption_daily.ipynb
+│   ├── 04_fact_consumption_weekly.ipynb
+│   └── 05_fact_consumption_monthly.ipynb
 ├── db/
 │   ├── migration.sql         # Schema DDL + seed data
 │   └── seed.sql              # Standalone seed data (idempotent)
@@ -79,6 +99,40 @@ Six tables in Lakebase (`databricks_postgres`):
 | `activities` | Activity feed (meetings, use-case changes, notes) |
 
 Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` → `onboarding` → `live`
+
+## Research Agent
+
+The app is powered by a LangGraph multi-agent supervisor deployed to Databricks Model Serving.
+
+**Architecture:**
+- **Foundation Model**: `databricks-gpt-oss-120b`
+- **Genie Integration**: Queries Delta tables (`ankit_yadav.demo.*`) for consumption analytics
+- **UC Function Tools**:
+  - `get_accounts_by_account_executive` - Account lookup by AE
+  - `get_account_summaries` - AI-powered account analysis
+  - `get_live_date_follow_up_messages` - Generate follow-up messages
+
+**Middleware Stack:**
+- `TodoListMiddleware` - Task planning with write_todos/read_todos
+- `FilesystemMiddleware` - Virtual filesystem, auto-evicts large results
+- `SummarizationMiddleware` - Token-aware context management
+- `PatchToolCallsMiddleware` - Handles dangling tool calls
+
+**Deployment**: MLflow `ResponsesAgent` wrapper → Model Serving endpoint
+
+## Genie Space Tables
+
+Delta tables in `ankit_yadav.demo.*` power the Genie analytics:
+
+| Table | Description |
+|-------|-------------|
+| `dim_accounts` | Account dimension (5 accounts aligned with Lakebase) |
+| `dim_use_cases` | Use case dimension (10 use cases aligned with Lakebase) |
+| `fact_consumption_daily` | Daily consumption metrics (90 days) |
+| `fact_consumption_weekly` | Weekly aggregated consumption |
+| `fact_consumption_monthly` | Monthly aggregated consumption |
+
+Run notebooks in `genie_tables/` in order (01-05) to populate.
 
 ## Prerequisites
 
@@ -181,6 +235,8 @@ The backend connects to Lakebase using the **Postgres wire protocol** via the `p
 | Backend | Express.js, Node.js |
 | Database | Databricks Lakebase (PostgreSQL-compatible) |
 | DB Driver | `pg` (node-postgres) |
-| AI Chat | Databricks Model Serving |
+| AI Agent | LangGraph, MLflow ResponsesAgent, databricks-langchain |
+| Analytics | Databricks Genie Space, Delta Lake, Unity Catalog |
+| AI Chat | Databricks Model Serving (GPT-OSS-120B, Claude Haiku 4.5) |
 | Build | Vite |
-| Deployment | Databricks Apps |
+| Deployment | Databricks Apps, Model Serving |
