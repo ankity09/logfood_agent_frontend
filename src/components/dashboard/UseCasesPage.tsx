@@ -87,6 +87,99 @@ const dateFilterOptions = [
 
 type DateFilter = typeof dateFilterOptions[number]['value']
 
+// Go-Live time bucket configuration
+type GoLiveBucket = 'overdue' | 'thisWeek' | 'nextWeek' | 'thisMonth' | 'later'
+
+const goLiveBucketConfig: Record<GoLiveBucket, {
+  label: string
+  color: string
+  bgColor: string
+  borderColor: string
+  icon: string
+}> = {
+  overdue: {
+    label: 'Overdue',
+    color: 'text-neon-pink',
+    bgColor: 'bg-neon-pink/10',
+    borderColor: 'border-neon-pink/30',
+    icon: '🚨'
+  },
+  thisWeek: {
+    label: 'This Week',
+    color: 'text-yellow-400',
+    bgColor: 'bg-yellow-400/10',
+    borderColor: 'border-yellow-400/30',
+    icon: '⚡'
+  },
+  nextWeek: {
+    label: 'Next Week',
+    color: 'text-neon-blue',
+    bgColor: 'bg-neon-blue/10',
+    borderColor: 'border-neon-blue/30',
+    icon: '📅'
+  },
+  thisMonth: {
+    label: 'This Month',
+    color: 'text-primary',
+    bgColor: 'bg-primary/10',
+    borderColor: 'border-primary/30',
+    icon: '✓'
+  },
+  later: {
+    label: 'Later',
+    color: 'text-theme-secondary',
+    bgColor: 'bg-theme-elevated',
+    borderColor: 'border-theme',
+    icon: '📆'
+  },
+}
+
+function getGoLiveBucket(goLiveDate: string | null): GoLiveBucket {
+  if (!goLiveDate) return 'later'
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const goLive = new Date(goLiveDate)
+  goLive.setHours(0, 0, 0, 0)
+
+  const diffDays = Math.ceil((goLive.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) return 'overdue'
+  if (diffDays <= 7) return 'thisWeek'
+  if (diffDays <= 14) return 'nextWeek'
+  if (diffDays <= 30) return 'thisMonth'
+  return 'later'
+}
+
+function getDaysUntilGoLive(goLiveDate: string | null): { days: number; label: string } {
+  if (!goLiveDate) return { days: Infinity, label: 'No date' }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const goLive = new Date(goLiveDate)
+  goLive.setHours(0, 0, 0, 0)
+
+  const diffDays = Math.ceil((goLive.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+
+  if (diffDays < 0) {
+    return { days: diffDays, label: `${Math.abs(diffDays)}d overdue` }
+  } else if (diffDays === 0) {
+    return { days: 0, label: 'Today!' }
+  } else if (diffDays === 1) {
+    return { days: 1, label: 'Tomorrow' }
+  } else if (diffDays <= 7) {
+    return { days: diffDays, label: `${diffDays}d` }
+  } else if (diffDays <= 30) {
+    const weeks = Math.ceil(diffDays / 7)
+    return { days: diffDays, label: `${weeks}w` }
+  } else {
+    const months = Math.ceil(diffDays / 30)
+    return { days: diffDays, label: `${months}mo` }
+  }
+}
+
 async function fetchUseCases(params?: {
   stage?: string
   service?: string
@@ -692,9 +785,122 @@ function ListView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[];
   )
 }
 
+// --- Go-Live Countdown Badge ---
+function GoLiveCountdown({ goLiveDate }: { goLiveDate: string | null }) {
+  const bucket = getGoLiveBucket(goLiveDate)
+  const { label } = getDaysUntilGoLive(goLiveDate)
+  const config = goLiveBucketConfig[bucket]
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${config.bgColor} ${config.color} border ${config.borderColor}`}>
+      <CalendarClock className="w-3 h-3" />
+      {label}
+    </span>
+  )
+}
+
+// --- Go-Live View ---
+function GoLiveView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[]; onSelect: (uc: UseCase) => void }) {
+  const buckets: GoLiveBucket[] = ['overdue', 'thisWeek', 'nextWeek', 'thisMonth', 'later']
+
+  // Group use cases by bucket and sort by date within each bucket
+  const groupedUseCases = buckets.reduce((acc, bucket) => {
+    acc[bucket] = filteredUseCases
+      .filter((uc) => getGoLiveBucket(uc.goLiveDate) === bucket)
+      .sort((a, b) => {
+        if (!a.goLiveDate) return 1
+        if (!b.goLiveDate) return -1
+        return new Date(a.goLiveDate).getTime() - new Date(b.goLiveDate).getTime()
+      })
+    return acc
+  }, {} as Record<GoLiveBucket, UseCase[]>)
+
+  const totalWithDates = filteredUseCases.filter(uc => uc.goLiveDate).length
+  const overdueCount = groupedUseCases.overdue.length
+  const thisWeekCount = groupedUseCases.thisWeek.length
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={`p-4 rounded-xl border ${goLiveBucketConfig.overdue.bgColor} ${goLiveBucketConfig.overdue.borderColor}`}>
+          <p className={`text-2xl font-bold ${goLiveBucketConfig.overdue.color}`}>{overdueCount}</p>
+          <p className="text-xs text-theme-secondary mt-1">Overdue</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${goLiveBucketConfig.thisWeek.bgColor} ${goLiveBucketConfig.thisWeek.borderColor}`}>
+          <p className={`text-2xl font-bold ${goLiveBucketConfig.thisWeek.color}`}>{thisWeekCount}</p>
+          <p className="text-xs text-theme-secondary mt-1">This Week</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${goLiveBucketConfig.thisMonth.bgColor} ${goLiveBucketConfig.thisMonth.borderColor}`}>
+          <p className={`text-2xl font-bold ${goLiveBucketConfig.thisMonth.color}`}>{groupedUseCases.thisMonth.length}</p>
+          <p className="text-xs text-theme-secondary mt-1">This Month</p>
+        </div>
+        <div className="p-4 rounded-xl border border-theme bg-theme-card">
+          <p className="text-2xl font-bold text-theme-primary">{totalWithDates}</p>
+          <p className="text-xs text-theme-secondary mt-1">Total Scheduled</p>
+        </div>
+      </div>
+
+      {/* Bucket Columns */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        {buckets.map((bucket) => {
+          const casesInBucket = groupedUseCases[bucket]
+          const config = goLiveBucketConfig[bucket]
+
+          return (
+            <div key={bucket} className="space-y-3">
+              <div className={`flex items-center justify-between p-3 rounded-xl ${config.bgColor} border ${config.borderColor}`}>
+                <h3 className={`text-sm font-semibold ${config.color} flex items-center gap-2`}>
+                  <span>{config.icon}</span>
+                  {config.label}
+                </h3>
+                <span className={`text-xs font-bold ${config.color} bg-white/10 px-2 py-0.5 rounded-full`}>
+                  {casesInBucket.length}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {casesInBucket.length === 0 ? (
+                  <p className="text-xs text-theme-muted text-center py-4 italic">No use cases</p>
+                ) : (
+                  casesInBucket.map((uc) => (
+                    <motion.div
+                      key={uc.id}
+                      whileHover={{ scale: 1.02 }}
+                      onClick={() => onSelect(uc)}
+                      className={`p-3 rounded-xl cursor-pointer transition-all border ${config.borderColor} bg-theme-card hover:bg-theme-elevated`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h4 className="text-sm font-medium text-theme-primary truncate flex-1">{uc.title}</h4>
+                        <GoLiveCountdown goLiveDate={uc.goLiveDate} />
+                      </div>
+                      <p className="text-xs text-theme-secondary flex items-center gap-1 mb-2">
+                        <Building2 className="w-3 h-3" />
+                        {uc.account}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <StageBadge stage={uc.stage} />
+                        <span className="text-xs text-theme-muted">
+                          {uc.goLiveDate
+                            ? new Date(uc.goLiveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                            : 'No date'}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // --- Main Page ---
 export function UseCasesPage() {
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
+  const [viewMode, setViewMode] = useState<'board' | 'list' | 'golive'>('board')
   const [searchQuery, setSearchQuery] = useState('')
   const [stageFilter, setStageFilter] = useState<Stage | 'all'>('all')
   const [serviceFilter, setServiceFilter] = useState<DatabricksService | 'all'>('all')
@@ -835,6 +1041,15 @@ export function UseCasesPage() {
             >
               List
             </button>
+            <button
+              onClick={() => setViewMode('golive')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
+                viewMode === 'golive' ? 'bg-primary/20 text-primary' : 'text-theme-secondary hover:text-theme-primary'
+              }`}
+            >
+              <Rocket className="w-3 h-3" />
+              Go-Live
+            </button>
           </div>
         </div>
       </motion.div>
@@ -876,6 +1091,8 @@ export function UseCasesPage() {
           </div>
         ) : viewMode === 'board' ? (
           <StageColumnView filteredUseCases={filteredUseCases} onSelect={setSelectedUseCase} />
+        ) : viewMode === 'golive' ? (
+          <GoLiveView filteredUseCases={filteredUseCases} onSelect={setSelectedUseCase} />
         ) : (
           <ListView filteredUseCases={filteredUseCases} onSelect={setSelectedUseCase} />
         )}
