@@ -5,36 +5,40 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        Databricks App                            │
-│  ┌──────────────┐        ┌───────────────────────┐               │
-│  │  React SPA   │──API──▶│    Express Server     │               │
-│  │  (Vite+TS)   │        │    (server/index.js)  │               │
-│  └──────────────┘        └───┬──────────┬────────┘               │
-└──────────────────────────────┼──────────┼────────────────────────┘
-                               │          │
-                    ┌──────────▼──┐  ┌────▼──────────────────────┐
-                    │  Lakebase   │  │ Model Serving             │
-                    │  (Postgres) │  │ (LangGraph Agent)         │
-                    └─────────────┘  └────┬──────────────────────┘
-                                          │
-                          ┌───────────────┼───────────────┐
-                          │               │               │
-                    ┌─────▼─────┐  ┌──────▼──────┐  ┌─────▼─────┐
-                    │  Genie    │  │ UC Functions│  │  Claude   │
-                    │  Space    │  │ (Tools)     │  │  Haiku    │
-                    └─────┬─────┘  └─────────────┘  └───────────┘
-                          │
-                    ┌─────▼─────┐
-                    │ Delta Lake│
-                    │ (Unity)   │
-                    └───────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                           Databricks App                              │
+│  ┌──────────────┐           ┌───────────────────────┐                 │
+│  │  React SPA   │───API────▶│    Express Server     │                 │
+│  │  (Vite+TS)   │           │    (server/index.js)  │                 │
+│  └──────────────┘           └───┬─────────┬─────────┘                 │
+└─────────────────────────────────┼─────────┼───────────────────────────┘
+                                  │         │
+            ┌─────────────────────┼─────────┼─────────────────────┐
+            │                     │         │                     │
+     ┌──────▼──────┐       ┌──────▼──────┐  │  ┌─────────────────────────┐
+     │  Lakebase   │       │Claude Haiku │  │  │  LangGraph Agent        │
+     │  (Postgres) │       │ (Extraction)│  │  │  (GPT-OSS-120B)         │
+     └─────────────┘       └─────────────┘  │  └────────┬────────────────┘
+                                            │           │
+                           Model Serving ───┘           │
+                                            ┌───────────┴───────────┐
+                                            │                       │
+                                      ┌─────▼─────┐          ┌──────▼──────┐
+                                      │  Genie    │          │ UC Functions│
+                                      │  Space    │          │   (Tools)   │
+                                      └─────┬─────┘          └─────────────┘
+                                            │
+                                      ┌─────▼─────┐
+                                      │ Delta Lake│
+                                      │  (Unity)  │
+                                      └───────────┘
 ```
 
 - **Frontend**: React 18 + TypeScript + Tailwind CSS + Framer Motion
 - **Backend**: Express.js serving the SPA and API routes
 - **Database**: Databricks Lakebase (Postgres-compatible, autoscaling)
-- **AI Chat**: Multi-agent supervisor (LangGraph) + Claude Haiku 4.5 for extraction
+- **Research Agent**: LangGraph supervisor (GPT-OSS-120B) → Genie Space + UC Functions
+- **AI Extraction**: Claude Haiku 4.5 for meeting notes extraction & Salesforce updates
 - **Auth**: On-behalf-of-user via `X-Forwarded-Access-Token` (Databricks Apps)
 
 ## Pages
@@ -102,10 +106,10 @@ Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` �
 
 ## Research Agent
 
-The app is powered by a LangGraph multi-agent supervisor deployed to Databricks Model Serving.
+The research/chat functionality is powered by a LangGraph multi-agent supervisor deployed to Databricks Model Serving.
 
 **Architecture:**
-- **Foundation Model**: `databricks-gpt-oss-120b`
+- **Foundation Model**: `databricks-gpt-oss-120b` (NOT Claude Haiku - that's for extraction)
 - **Genie Integration**: Queries Delta tables (`ankit_yadav.demo.*`) for consumption analytics
 - **UC Function Tools**:
   - `get_accounts_by_account_executive` - Account lookup by AE
@@ -237,6 +241,7 @@ The backend connects to Lakebase using the **Postgres wire protocol** via the `p
 | DB Driver | `pg` (node-postgres) |
 | AI Agent | LangGraph, MLflow ResponsesAgent, databricks-langchain |
 | Analytics | Databricks Genie Space, Delta Lake, Unity Catalog |
-| AI Chat | Databricks Model Serving (GPT-OSS-120B, Claude Haiku 4.5) |
+| Research Agent | LangGraph + GPT-OSS-120B (Model Serving) |
+| AI Extraction | Claude Haiku 4.5 (Model Serving) |
 | Build | Vite |
 | Deployment | Databricks Apps, Model Serving |
