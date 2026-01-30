@@ -197,8 +197,11 @@ function RecentActivity({ activities }: { activities: ActivityItem[] }) {
 }
 
 function UpcomingGoLives({ useCases }: { useCases: UseCase[] }) {
+  // Guard against undefined/null useCases
+  const safeUseCases = useCases || []
+
   // Filter to upcoming go-lives (overdue, this week, next week) and sort by date
-  const upcomingUseCases = useCases
+  const upcomingUseCases = safeUseCases
     .filter(uc => {
       const bucket = getGoLiveBucket(uc.goLiveDate)
       return bucket === 'overdue' || bucket === 'thisWeek' || bucket === 'nextWeek'
@@ -210,8 +213,8 @@ function UpcomingGoLives({ useCases }: { useCases: UseCase[] }) {
     })
     .slice(0, 5)
 
-  const overdueCount = useCases.filter(uc => getGoLiveBucket(uc.goLiveDate) === 'overdue').length
-  const thisWeekCount = useCases.filter(uc => getGoLiveBucket(uc.goLiveDate) === 'thisWeek').length
+  const overdueCount = safeUseCases.filter(uc => getGoLiveBucket(uc.goLiveDate) === 'overdue').length
+  const thisWeekCount = safeUseCases.filter(uc => getGoLiveBucket(uc.goLiveDate) === 'thisWeek').length
 
   if (upcomingUseCases.length === 0) {
     return (

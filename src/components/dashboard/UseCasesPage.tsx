@@ -802,10 +802,11 @@ function GoLiveCountdown({ goLiveDate }: { goLiveDate: string | null }) {
 // --- Go-Live View ---
 function GoLiveView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[]; onSelect: (uc: UseCase) => void }) {
   const buckets: GoLiveBucket[] = ['overdue', 'thisWeek', 'nextWeek', 'thisMonth', 'later']
+  const safeUseCases = filteredUseCases || []
 
   // Group use cases by bucket and sort by date within each bucket
   const groupedUseCases = buckets.reduce((acc, bucket) => {
-    acc[bucket] = filteredUseCases
+    acc[bucket] = safeUseCases
       .filter((uc) => getGoLiveBucket(uc.goLiveDate) === bucket)
       .sort((a, b) => {
         if (!a.goLiveDate) return 1
@@ -815,7 +816,7 @@ function GoLiveView({ filteredUseCases, onSelect }: { filteredUseCases: UseCase[
     return acc
   }, {} as Record<GoLiveBucket, UseCase[]>)
 
-  const totalWithDates = filteredUseCases.filter(uc => uc.goLiveDate).length
+  const totalWithDates = safeUseCases.filter(uc => uc.goLiveDate).length
   const overdueCount = groupedUseCases.overdue.length
   const thisWeekCount = groupedUseCases.thisWeek.length
 
