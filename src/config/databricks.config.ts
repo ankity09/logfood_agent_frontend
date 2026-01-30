@@ -63,6 +63,10 @@ export const databricksConfig = {
     activitiesEndpoint: '/activities',
     statsEndpoint: '/stats',
     generateUpdateEndpoint: '/generate-update',
+
+    // Chat session persistence endpoints
+    chatSessionsEndpoint: '/chat-sessions',
+    chatMessagesEndpoint: '/chat-messages',
   },
 
   // UI Configuration

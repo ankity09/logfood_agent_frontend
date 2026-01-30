@@ -459,6 +459,284 @@ router.get('/stats', async (req, res) => {
 })
 
 // -------------------------------------------------------------------
+// CHAT SESSIONS
+// -------------------------------------------------------------------
+
+/**
+ * GET /api/chat-sessions
+ * List user's chat sessions (most recent first, max 30)
+ */
+router.get('/chat-sessions', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+
+    const sql = `
+      SELECT id, title, created_at, updated_at
+      FROM chat_sessions
+      WHERE user_email = $1
+      ORDER BY updated_at DESC
+      LIMIT 30
+    `
+
+    const rows = await query(token, sql, [userEmail])
+    res.json(rows)
+  } catch (error) {
+    console.error('GET /api/chat-sessions error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/chat-sessions
+ * Create a new chat session
+ */
+router.post('/chat-sessions', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+    const { title } = req.body
+
+    const sql = `
+      INSERT INTO chat_sessions (user_email, title)
+      VALUES ($1, $2)
+      RETURNING id, user_email, title, created_at, updated_at
+    `
+
+    const rows = await query(token, sql, [userEmail, title || 'New conversation'])
+
+    // Cleanup old sessions (keep only last 30)
+    try {
+      await query(token, 'SELECT cleanup_old_chat_sessions($1, 30)', [userEmail])
+    } catch (cleanupErr) {
+      console.warn('Session cleanup warning:', cleanupErr.message)
+    }
+
+    res.status(201).json(rows[0])
+  } catch (error) {
+    console.error('POST /api/chat-sessions error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * GET /api/chat-sessions/:id
+ * Get a single session with all its messages
+ */
+router.get('/chat-sessions/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+
+    // Get session (verify ownership)
+    const sessionSql = `
+      SELECT id, user_email, title, created_at, updated_at
+      FROM chat_sessions
+      WHERE id = $1 AND user_email = $2
+    `
+    const sessionRows = await query(token, sessionSql, [req.params.id, userEmail])
+
+    if (sessionRows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    // Get messages
+    const messagesSql = `
+      SELECT id, role, content, status, created_at
+      FROM chat_messages
+      WHERE session_id = $1
+      ORDER BY created_at ASC
+    `
+    const messageRows = await query(token, messagesSql, [req.params.id])
+
+    res.json({
+      ...sessionRows[0],
+      messages: messageRows,
+    })
+  } catch (error) {
+    console.error('GET /api/chat-sessions/:id error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * PATCH /api/chat-sessions/:id
+ * Update session title
+ */
+router.patch('/chat-sessions/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+    const { title } = req.body
+
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' })
+    }
+
+    const sql = `
+      UPDATE chat_sessions
+      SET title = $1, updated_at = NOW()
+      WHERE id = $2 AND user_email = $3
+      RETURNING id, user_email, title, created_at, updated_at
+    `
+
+    const rows = await query(token, sql, [title, req.params.id, userEmail])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    console.error('PATCH /api/chat-sessions/:id error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * DELETE /api/chat-sessions/:id
+ * Delete a chat session and all its messages
+ */
+router.delete('/chat-sessions/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+
+    const sql = `
+      DELETE FROM chat_sessions
+      WHERE id = $1 AND user_email = $2
+      RETURNING id
+    `
+
+    const rows = await query(token, sql, [req.params.id, userEmail])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    res.json({ success: true, deletedId: rows[0].id })
+  } catch (error) {
+    console.error('DELETE /api/chat-sessions/:id error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /api/chat-sessions/:id/messages
+ * Add a user message to a session
+ * (Assistant messages are added after AI response)
+ */
+router.post('/chat-sessions/:id/messages', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+    const { role, content, status } = req.body
+
+    if (!role || !content) {
+      return res.status(400).json({ error: 'role and content are required' })
+    }
+
+    // Verify session ownership
+    const sessionCheck = await query(
+      token,
+      'SELECT id FROM chat_sessions WHERE id = $1 AND user_email = $2',
+      [req.params.id, userEmail]
+    )
+
+    if (sessionCheck.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
+
+    const sql = `
+      INSERT INTO chat_messages (session_id, role, content, status)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, session_id, role, content, status, created_at
+    `
+
+    const rows = await query(token, sql, [
+      req.params.id,
+      role,
+      content,
+      status || 'completed',
+    ])
+
+    res.status(201).json(rows[0])
+  } catch (error) {
+    console.error('POST /api/chat-sessions/:id/messages error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * PATCH /api/chat-messages/:id
+ * Update a message (e.g., change status from 'processing' to 'completed')
+ */
+router.patch('/chat-messages/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const userEmail = req.headers['x-forwarded-email'] || 'unknown'
+    const { content, status } = req.body
+
+    // Build update
+    const sets = []
+    const params = []
+    let idx = 1
+
+    if (content !== undefined) {
+      sets.push(`content = $${idx++}`)
+      params.push(content)
+    }
+    if (status !== undefined) {
+      sets.push(`status = $${idx++}`)
+      params.push(status)
+    }
+
+    if (sets.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' })
+    }
+
+    params.push(req.params.id)
+    params.push(userEmail)
+
+    // Update message only if user owns the session
+    const sql = `
+      UPDATE chat_messages cm
+      SET ${sets.join(', ')}
+      FROM chat_sessions cs
+      WHERE cm.id = $${idx}
+        AND cm.session_id = cs.id
+        AND cs.user_email = $${idx + 1}
+      RETURNING cm.id, cm.session_id, cm.role, cm.content, cm.status, cm.created_at
+    `
+
+    const rows = await query(token, sql, params)
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Message not found' })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    console.error('PATCH /api/chat-messages/:id error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// -------------------------------------------------------------------
 // Transform helpers
 // -------------------------------------------------------------------
 
