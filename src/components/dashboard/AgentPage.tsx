@@ -135,11 +135,6 @@ export function AgentPage() {
     }
   }, [currentSessionId])
 
-  // Fetch sessions on mount and restore last session
-  useEffect(() => {
-    fetchSessions()
-  }, [])
-
   // Cleanup polling on unmount
   useEffect(() => {
     return () => {
@@ -156,12 +151,6 @@ export function AgentPage() {
       if (res.ok) {
         const data = await res.json()
         setSessions(data)
-
-        // Restore last session if exists
-        const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY)
-        if (savedSessionId && data.some((s: ChatSession) => s.id === savedSessionId)) {
-          loadSession(savedSessionId)
-        }
       } else {
         toast.error('Failed to load chat history')
       }
@@ -266,6 +255,24 @@ export function AgentPage() {
       toast.error('Failed to load conversation')
     }
   }, [toast, startPolling])
+
+  // Fetch sessions on mount
+  useEffect(() => {
+    fetchSessions()
+  }, [])
+
+  // Restore last session after sessions are loaded
+  useEffect(() => {
+    if (!sessionsLoading && !currentSessionId) {
+      const savedSessionId = localStorage.getItem(CURRENT_SESSION_KEY)
+      if (savedSessionId) {
+        const sessionExists = sessions.some(s => s.id === savedSessionId)
+        if (sessionExists) {
+          loadSession(savedSessionId)
+        }
+      }
+    }
+  }, [sessionsLoading, sessions, currentSessionId, loadSession])
 
   // Create new session
   const createSession = async (title: string): Promise<string | null> => {
