@@ -162,10 +162,21 @@ INSERT INTO use_cases (id, title, description, account_id, owner_id, stage, valu
     ARRAY['CEO', 'CFO', 'Head of Analytics'],
     '2025-03-01',
     '2024-12-27T00:00:00Z'
-  ),
-  -- ============================================================
-  -- NEW USE CASES WITH 2026 GO-LIVE DATES
-  -- ============================================================
+  )
+ON CONFLICT (id) DO UPDATE SET
+  title = EXCLUDED.title,
+  description = EXCLUDED.description,
+  stage = EXCLUDED.stage,
+  value_cents = EXCLUDED.value_cents,
+  databricks_services = EXCLUDED.databricks_services,
+  next_steps = EXCLUDED.next_steps,
+  stakeholders = EXCLUDED.stakeholders,
+  go_live_date = EXCLUDED.go_live_date;
+
+-- ============================================================
+-- NEW USE CASES WITH 2026 GO-LIVE DATES
+-- ============================================================
+INSERT INTO use_cases (id, title, description, account_id, owner_id, stage, value_cents, databricks_services, next_steps, stakeholders, go_live_date, created_at) VALUES
   -- THIS WEEK (Jan 30 - Feb 5)
   (
     'cc000000-0000-0000-0000-000000000011',
