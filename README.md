@@ -46,7 +46,9 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 | **Overview** | Dashboard with pipeline stats, stage counts, and recent activity |
 | **Research Agent** | Full-featured AI chat with persistent conversation history, session management, and async processing |
 | **Use Cases** | Filterable pipeline of sales use cases with stage/service/search filters and Go-Live view |
-| **Meeting Notes** | Uploaded meeting notes with AI-extracted use cases and Salesforce update generation |
+| **Accounts** | Account Central with metrics aggregation, stage distribution, and drill-down |
+| **Meeting Notes** | Uploaded meeting notes with AI-extracted use cases, structured summaries, and confidence scoring |
+| **Reports** | AI-generated reports (weekly, monthly, quarterly, use case summary, custom) |
 | **Documentation** | Help, architecture overview, and feature documentation |
 
 ## Project Structure
@@ -70,21 +72,36 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 │   └── 05_fact_consumption_monthly.ipynb
 ├── db/
 │   ├── migration.sql                  # Core schema DDL + seed data
-│   ├── migration_v3_chat_sessions.sql # Chat persistence schema (sessions, messages)
+│   ├── migration_v3_chat_sessions.sql # Chat persistence schema
+│   ├── migration_v4_enhancements.sql  # Enhanced meeting notes, extracted use cases
+│   ├── migration_v5_reports.sql       # Reports table
+│   ├── migration_v6_pgvector.sql      # RAG embeddings (pgvector)
 │   ├── seed.sql                       # Standalone seed data (idempotent)
 │   └── seed_chat_sessions.sql         # Sample chat conversations
 ├── server/
 │   ├── index.js              # Express server entry point
 │   ├── config.js             # Centralized config (env vars)
-│   └── lakebase.js           # Lakebase Postgres routes (pg driver)
+│   ├── lakebase.js           # Lakebase Postgres routes (pg driver)
+│   ├── routes/
+│   │   ├── users.js          # User/AE endpoints
+│   │   ├── reports.js        # Report generation endpoints
+│   │   └── context-search.js # RAG search endpoints
+│   ├── services/
+│   │   ├── embedding.js      # Databricks GTE embedding service
+│   │   └── context-indexer.js# Auto-indexing for RAG
+│   └── prompts/
+│       └── meeting-notes.js  # Enhanced extraction prompts
 └── src/
-    ├── App.tsx               # Main app with tab routing
+    ├── App.tsx               # Main app with 7-tab routing
     ├── main.tsx
     ├── config/
     │   └── databricks.config.ts  # Frontend API config
+    ├── context/
+    │   └── NavigationContext.tsx # Cross-tab navigation state
     ├── components/
     │   ├── layout/           # Sidebar, header layout
-    │   ├── dashboard/        # OverviewDashboard, AgentPage, UseCasesPage, MeetingNotesPage
+    │   ├── dashboard/        # OverviewDashboard, AgentPage, UseCasesPage,
+    │   │                     # AccountCentralPage, MeetingNotesPage, ReportsPage
     │   ├── chatbot/          # Chat interface components
     │   └── ui/               # Shared UI primitives
     └── styles/
@@ -92,22 +109,26 @@ A full-stack Databricks App for managing sales use-case pipelines, meeting notes
 
 ## Database Schema
 
-Eight tables in Lakebase (`databricks_postgres`):
+Ten tables in Lakebase (`databricks_postgres`):
 
 | Table | Description |
 |---|---|
 | `accounts` | Customer companies |
 | `users` | Internal team members / owners |
 | `use_cases` | Core pipeline entity with stage, value, services, stakeholders |
-| `meeting_notes` | Uploaded meeting documents with summaries |
-| `extracted_use_cases` | AI-extracted use cases linked to meeting notes |
+| `meeting_notes` | Uploaded meeting documents with summaries, structured_summary JSONB |
+| `extracted_use_cases` | AI-extracted use cases with extraction_type, confidence_score |
 | `activities` | Activity feed (meetings, use-case changes, notes) |
 | `chat_sessions` | Conversation threads with user, title, timestamps |
-| `chat_messages` | Individual messages with role, content, and processing status |
+| `chat_messages` | Individual messages with role, content, status, and metadata |
+| `reports` | AI-generated reports (weekly, monthly, quarterly, custom) |
+| `context_embeddings` | RAG embeddings with pgvector (optional) |
 
 Use-case stages: `validating` → `scoping` → `evaluating` → `confirming` → `onboarding` → `live`
 
 Message status: `pending` → `processing` → `completed` (or `failed`)
+
+Extraction types: `new` (new use case) | `update` (update to existing)
 
 ## Research Agent
 
@@ -169,8 +190,69 @@ Run notebooks in `genie_tables/` in order (01-05) to populate.
 - Node.js 18+
 - A Databricks workspace with:
   - A **Lakebase Autoscaling** instance
-  - A **Model Serving** endpoint (for AI chat)
+  - **Model Serving** endpoints (Claude Haiku for extraction, LangGraph agent for chat)
   - A **Databricks App** configured with on-behalf-of-user auth
+
+## New Workspace Setup (Complete Checklist)
+
+If you're setting up on a new Databricks workspace:
+
+### 1. Create Lakebase Instance
+```
+Workspace → Data → Databases → Create → Lakebase Autoscaling
+```
+Note the **Postgres host** (e.g., `ep-xxx.database.us-east-1.cloud.databricks.com`)
+
+### 2. Run Database Migrations
+Connect to Lakebase and run migrations in order:
+```sql
+-- Run each file in order via SQL Editor or psql:
+-- 1. db/migration.sql
+-- 2. db/migration_v3_chat_sessions.sql
+-- 3. db/migration_v4_enhancements.sql
+-- 4. db/migration_v5_reports.sql
+-- 5. db/migration_v6_pgvector.sql (optional - requires pgvector)
+```
+
+### 3. Set Up Model Serving Endpoints
+You need these endpoints:
+| Endpoint | Model | Purpose |
+|----------|-------|---------|
+| `databricks-claude-haiku-4-5` | Claude Haiku 4.5 | Meeting notes extraction, Salesforce updates, Report generation |
+| `agents_ankit_yadav-demo-logfood_agent_dev` | LangGraph Agent | Research chat (with Genie + UC tools) |
+| `databricks-gte-large-en` | GTE-Large | Embeddings for RAG (optional) |
+
+### 4. Update `app.yaml`
+Update with your workspace values:
+```yaml
+env:
+  - name: DATABRICKS_HOST
+    value: https://YOUR-WORKSPACE.cloud.databricks.com
+  - name: DATABRICKS_AGENT_ENDPOINT
+    value: YOUR_AGENT_ENDPOINT_NAME
+  - name: DATABRICKS_CLAUDE_ENDPOINT
+    value: databricks-claude-haiku-4-5
+  - name: LAKEBASE_PG_HOST
+    value: YOUR-LAKEBASE-HOST.database.us-east-1.cloud.databricks.com
+  - name: LAKEBASE_PG_DATABASE
+    value: databricks_postgres
+  - name: LAKEBASE_PG_USER
+    value: your.email@databricks.com
+```
+
+### 5. Create Databricks App
+```
+Workspace → Compute → Apps → Create App
+- Source: GitHub repo
+- Branch: main
+- Enable: "On behalf of user" authentication
+```
+
+### 6. (Optional) Set Up Genie Space
+For consumption analytics, run notebooks in `genie_tables/` in order (01-05) to create Delta tables, then create a Genie Space pointing to them.
+
+### 7. (Optional) Deploy LangGraph Agent
+Run `agent/Logfood_Agent_Dev.ipynb` to deploy the research agent to Model Serving.
 
 ## Local Development
 
@@ -195,21 +277,43 @@ npm run dev:server
 ## Database Setup
 
 1. Create a Lakebase Autoscaling instance in your Databricks workspace.
-2. Run the migrations to create tables:
+2. Run the migrations **in order** to create tables:
    ```bash
-   # Core tables
-   psql "postgresql://user@host:5432/databricks_postgres?sslmode=require" -f db/migration.sql
+   # Connection string format
+   CONN="postgresql://user@host:5432/databricks_postgres?sslmode=require"
 
-   # Chat session tables
-   psql "postgresql://user@host:5432/databricks_postgres?sslmode=require" -f db/migration_v3_chat_sessions.sql
+   # Core tables (v1)
+   psql "$CONN" -f db/migration.sql
+
+   # Chat session tables (v3)
+   psql "$CONN" -f db/migration_v3_chat_sessions.sql
+
+   # Enhanced fields for meeting notes, extracted use cases (v4)
+   psql "$CONN" -f db/migration_v4_enhancements.sql
+
+   # Reports table (v5)
+   psql "$CONN" -f db/migration_v5_reports.sql
+
+   # RAG embeddings with pgvector (v6) - OPTIONAL, requires pgvector extension
+   psql "$CONN" -f db/migration_v6_pgvector.sql
    ```
    Or paste the contents into the Lakebase SQL editor.
 
 3. Optionally seed with sample data:
    ```bash
-   psql ... -f db/seed.sql                # Core sample data
-   psql ... -f db/seed_chat_sessions.sql  # Sample conversations
+   psql "$CONN" -f db/seed.sql                # Core sample data
+   psql "$CONN" -f db/seed_chat_sessions.sql  # Sample conversations
    ```
+
+### Migration Summary
+
+| Migration | Description |
+|-----------|-------------|
+| `migration.sql` | Core tables: accounts, users, use_cases, meeting_notes, extracted_use_cases, activities |
+| `migration_v3_chat_sessions.sql` | Chat persistence: chat_sessions, chat_messages |
+| `migration_v4_enhancements.sql` | Enhanced fields: structured_summary, confidence_score, extraction_type |
+| `migration_v5_reports.sql` | Reports table for AI-generated reports |
+| `migration_v6_pgvector.sql` | RAG: context_embeddings with pgvector (requires extension) |
 
 ## Building for Production
 
@@ -255,8 +359,11 @@ This compiles TypeScript and builds the Vite frontend into `dist/`. The Express 
 | `GET` | `/api/use-cases/:id` | Get single use case |
 | `POST` | `/api/use-cases` | Create use case |
 | `PATCH` | `/api/use-cases/:id` | Update use case |
+| `DELETE` | `/api/use-cases/:id` | Delete use case |
 | `GET` | `/api/accounts` | List accounts |
 | `POST` | `/api/accounts` | Create account |
+| `GET` | `/api/users` | List users/AEs with stats |
+| `GET` | `/api/users/:id` | Get user details with use cases |
 
 ### Meeting Notes & AI Extraction
 
@@ -264,9 +371,27 @@ This compiles TypeScript and builds the Vite frontend into `dist/`. The Express 
 |---|---|---|
 | `GET` | `/api/meeting-notes` | List meeting notes with extracted use cases |
 | `POST` | `/api/meeting-notes` | Create meeting note |
+| `PATCH` | `/api/meeting-notes/:id` | Update meeting note (structured_summary, etc.) |
 | `POST` | `/api/extracted-use-cases` | Save AI-extracted use case |
+| `PATCH` | `/api/extracted-use-cases/:id` | Update extracted use case (link to existing) |
 | `POST` | `/api/extract-use-cases` | AI extraction from raw notes (Claude Haiku) |
 | `POST` | `/api/generate-update` | Generate Salesforce update from notes (Claude Haiku) |
+
+### Reports (AI-Generated)
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/reports` | List user's reports |
+| `POST` | `/api/reports` | Generate new report (types: weekly, monthly, quarterly, use_case_summary, custom) |
+| `GET` | `/api/reports/:id` | Get report with full content |
+| `DELETE` | `/api/reports/:id` | Delete report |
+
+### Context Search (RAG)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/context-search` | Semantic search over embeddings |
+| `GET` | `/api/context-search/stats` | Get embedding statistics |
 
 ### Activities
 
