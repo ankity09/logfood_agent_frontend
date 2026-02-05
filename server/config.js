@@ -27,6 +27,7 @@ const isDatabricksApp = !!process.env.DATABRICKS_APP_NAME
 // Default endpoints
 const DEFAULT_AGENT_ENDPOINT = 'agents_ankit_yadav-demo-logfood_agent_dev'
 const DEFAULT_CLAUDE_ENDPOINT = 'databricks-claude-haiku-4-5'
+const DEFAULT_EMBEDDING_ENDPOINT = 'databricks-gte-large-en'
 
 export const config = {
   databricks: {
@@ -51,6 +52,10 @@ export const config = {
     // Legacy: fallback chat endpoint (used if specific endpoints not configured)
     chatEndpoint:
       process.env.DATABRICKS_CHAT_ENDPOINT || DEFAULT_CLAUDE_ENDPOINT,
+
+    // Embedding endpoint for RAG (GTE-large produces 1024 dimensions)
+    embeddingEndpoint:
+      process.env.DATABRICKS_EMBEDDING_ENDPOINT || DEFAULT_EMBEDDING_ENDPOINT,
 
     // Flag indicating Databricks Apps environment
     isDatabricksApp,
@@ -121,6 +126,7 @@ export function logConfig() {
   console.log(`  Databricks Host: ${config.databricks.instanceUrl}`)
   console.log(`  Agent Endpoint: ${config.databricks.agentEndpoint} (Chat UI, Agent Tab)`)
   console.log(`  Claude Endpoint: ${config.databricks.claudeEndpoint} (Extraction, Updates)`)
+  console.log(`  Embedding Endpoint: ${config.databricks.embeddingEndpoint} (RAG)`)
   console.log(`  Lakebase PG Host: ${config.lakebase.pgHost || 'Not set'}`)
   console.log(`  Token Configured: ${config.databricks.token ? 'Yes' : 'No'}`)
   console.log(`  Port: ${config.server.port}`)

@@ -206,6 +206,28 @@ router.patch('/use-cases/:id', async (req, res) => {
   }
 })
 
+/**
+ * DELETE /api/use-cases/:id
+ */
+router.delete('/use-cases/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const sql = `DELETE FROM use_cases WHERE id = $1 RETURNING id`
+    const rows = await query(token, sql, [req.params.id])
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Use case not found' })
+    }
+
+    res.json({ success: true, deletedId: rows[0].id })
+  } catch (error) {
+    console.error('DELETE /api/use-cases/:id error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 // -------------------------------------------------------------------
 // ACCOUNTS
 // -------------------------------------------------------------------
@@ -272,6 +294,7 @@ router.get('/meeting-notes', async (req, res) => {
     const sql = `
       SELECT
         mn.id, mn.filename, mn.summary, mn.attendees, mn.uploaded_at,
+        mn.title, mn.raw_content, mn.is_processed, mn.structured_summary,
         a.id AS account_id, a.name AS account_name
       FROM meeting_notes mn
       LEFT JOIN accounts a ON mn.account_id = a.id
@@ -311,18 +334,71 @@ router.post('/meeting-notes', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const { filename, account_id, summary, attendees } = req.body
+    const { filename, account_id, summary, attendees, title, raw_content, structured_summary } = req.body
 
     const sql = `
-      INSERT INTO meeting_notes (filename, account_id, summary, attendees)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO meeting_notes (filename, account_id, summary, attendees, title, raw_content, structured_summary, is_processed)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `
 
-    const rows = await query(token, sql, [filename, account_id, summary, attendees || []])
+    const rows = await query(token, sql, [
+      filename,
+      account_id,
+      summary,
+      attendees || [],
+      title || null,
+      raw_content || null,
+      structured_summary ? JSON.stringify(structured_summary) : null,
+      !!structured_summary,
+    ])
     res.status(201).json(rows[0])
   } catch (error) {
     console.error('POST /api/meeting-notes error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * PATCH /api/meeting-notes/:id
+ * Update a meeting note (e.g., add structured_summary after processing)
+ */
+router.patch('/meeting-notes/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const allowed = ['summary', 'attendees', 'title', 'raw_content', 'structured_summary', 'is_processed', 'account_id']
+    const sets = []
+    const params = []
+    let idx = 1
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        if (field === 'structured_summary' && typeof req.body[field] === 'object') {
+          sets.push(`${field} = $${idx++}`)
+          params.push(JSON.stringify(req.body[field]))
+        } else {
+          sets.push(`${field} = $${idx++}`)
+          params.push(req.body[field])
+        }
+      }
+    }
+
+    if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' })
+
+    params.push(req.params.id)
+
+    const sql = `UPDATE meeting_notes SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`
+    const rows = await query(token, sql, params)
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Meeting note not found' })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    console.error('PATCH /api/meeting-notes/:id error:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
@@ -336,21 +412,75 @@ router.post('/extracted-use-cases', async (req, res) => {
     const token = req.userToken
     if (!token) return res.status(401).json({ error: 'Not authenticated' })
 
-    const { meeting_note_id, title, description, suggested_stage, next_steps, linked_use_case_id } = req.body
+    const {
+      meeting_note_id, title, description, suggested_stage, next_steps, linked_use_case_id,
+      extraction_type, extracted_updates, matched_use_case_title, confidence_score
+    } = req.body
 
     const sql = `
-      INSERT INTO extracted_use_cases (meeting_note_id, title, description, suggested_stage, next_steps, linked_use_case_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO extracted_use_cases (
+        meeting_note_id, title, description, suggested_stage, next_steps, linked_use_case_id,
+        extraction_type, extracted_updates, matched_use_case_title, confidence_score
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `
 
     const rows = await query(token, sql, [
-      meeting_note_id, title, description, suggested_stage, next_steps || [], linked_use_case_id || null,
+      meeting_note_id,
+      title,
+      description,
+      suggested_stage,
+      next_steps || [],
+      linked_use_case_id || null,
+      extraction_type || 'new',
+      extracted_updates || [],
+      matched_use_case_title || null,
+      confidence_score || null,
     ])
 
     res.status(201).json(rows[0])
   } catch (error) {
     console.error('POST /api/extracted-use-cases error:', error.message)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * PATCH /api/extracted-use-cases/:id
+ * Update an extracted use case (e.g., link to existing use case)
+ */
+router.patch('/extracted-use-cases/:id', async (req, res) => {
+  try {
+    const token = req.userToken
+    if (!token) return res.status(401).json({ error: 'Not authenticated' })
+
+    const allowed = ['linked_use_case_id', 'extraction_type', 'extracted_updates', 'matched_use_case_title', 'confidence_score']
+    const sets = []
+    const params = []
+    let idx = 1
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        sets.push(`${field} = $${idx++}`)
+        params.push(req.body[field])
+      }
+    }
+
+    if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' })
+
+    params.push(req.params.id)
+
+    const sql = `UPDATE extracted_use_cases SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`
+    const rows = await query(token, sql, params)
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Extracted use case not found' })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    console.error('PATCH /api/extracted-use-cases/:id error:', error.message)
     res.status(500).json({ error: error.message })
   }
 })
@@ -1061,10 +1191,14 @@ function transformMeetingNote(row, extractedUseCases) {
   return {
     id: row.id,
     filename: row.filename,
+    title: row.title || null,
     account: row.account_name || '',
     accountId: row.account_id,
     summary: row.summary || '',
     attendees: row.attendees || [],
+    rawContent: row.raw_content || null,
+    isProcessed: row.is_processed || false,
+    structuredSummary: row.structured_summary || null,
     uploadDate: new Date(row.uploaded_at).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -1078,6 +1212,10 @@ function transformMeetingNote(row, extractedUseCases) {
       stage: euc.suggested_stage || 'validating',
       nextSteps: euc.next_steps || [],
       linkedUseCaseId: euc.linked_use_case_id,
+      extractionType: euc.extraction_type || 'new',
+      extractedUpdates: euc.extracted_updates || [],
+      matchedUseCaseTitle: euc.matched_use_case_title || null,
+      confidenceScore: euc.confidence_score || null,
     })),
   }
 }

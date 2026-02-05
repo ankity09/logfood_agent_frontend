@@ -14,6 +14,9 @@ import express from 'express'
 import cors from 'cors'
 import { config, validateConfig, logConfig } from './config.js'
 import lakebaseRoutes from './lakebase.js'
+import usersRoutes from './routes/users.js'
+import reportsRoutes from './routes/reports.js'
+import contextSearchRoutes from './routes/context-search.js'
 
 const app = express()
 const PORT = config.server.port
@@ -792,6 +795,11 @@ app.use('/api', (req, res, next) => {
 // Mount Lakebase data routes
 app.use('/api', lakebaseRoutes)
 
+// Mount new routes
+app.use('/api/users', usersRoutes)
+app.use('/api/reports', reportsRoutes)
+app.use('/api/context-search', contextSearchRoutes)
+
 // Catch-all route to serve the frontend for client-side routing
 app.get('*', (req, res) => {
   res.sendFile('index.html', { root: 'dist' })
@@ -823,4 +831,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  DELETE /api/chat-sessions/:id  - Delete session`)
   console.log(`  POST /api/chat-sessions/:id/messages - Add message`)
   console.log(`  PATCH /api/chat-messages/:id   - Update message`)
+  console.log(`  GET  /api/users                - List users/AEs`)
+  console.log(`  GET  /api/users/:id            - Get user details`)
+  console.log(`  GET  /api/reports              - List reports`)
+  console.log(`  POST /api/reports              - Generate report`)
+  console.log(`  GET  /api/reports/:id          - Get report`)
+  console.log(`  DELETE /api/reports/:id        - Delete report`)
+  console.log(`  POST /api/context-search       - Semantic search`)
+  console.log(`  GET  /api/context-search/stats - Embedding stats`)
 })

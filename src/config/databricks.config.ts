@@ -68,6 +68,11 @@ export const databricksConfig = {
     chatSessionsEndpoint: '/chat-sessions',
     chatMessagesEndpoint: '/chat-messages',
     chatMessageStatusEndpoint: '/chat-messages', // GET /:id/status
+
+    // New endpoints
+    usersEndpoint: '/users',
+    reportsEndpoint: '/reports',
+    contextSearchEndpoint: '/context-search',
   },
 
   // UI Configuration

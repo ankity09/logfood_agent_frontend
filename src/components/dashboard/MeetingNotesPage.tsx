@@ -44,17 +44,33 @@ interface ExtractedUseCase {
   description: string
   nextSteps: string[]
   copied: boolean
+  extractionType?: 'new' | 'update'
+  extractedUpdates?: string[]
+  matchedUseCaseTitle?: string
+  confidenceScore?: number
+}
+
+interface StructuredSummary {
+  executive_summary?: string
+  key_topics?: Array<{ topic: string; details: string; outcome?: string }>
+  decisions?: string[]
+  action_items?: Array<{ action: string; owner?: string; due_date?: string; priority?: string }>
+  risks_and_concerns?: Array<{ risk: string; impact?: string; mitigation?: string }>
 }
 
 interface MeetingNote {
   id: string
   filename: string
+  title?: string
   uploadDate: string
   account: string
   attendees: string[]
   extractedUseCases: ExtractedUseCase[]
   summary: string
   isExpanded: boolean
+  rawContent?: string
+  isProcessed?: boolean
+  structuredSummary?: StructuredSummary
 }
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -81,34 +97,88 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   )
 }
 
+function ConfidenceBadge({ score }: { score?: number }) {
+  if (!score) return null
+
+  const percentage = Math.round(score * 100)
+  let color = 'text-green-400 bg-green-400/10 border-green-400/20'
+  let label = 'High'
+
+  if (score < 0.7) {
+    color = 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20'
+    label = 'Medium'
+  }
+  if (score < 0.5) {
+    color = 'text-orange-400 bg-orange-400/10 border-orange-400/20'
+    label = 'Low'
+  }
+
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${color}`} title={`${percentage}% confidence`}>
+      {label} ({percentage}%)
+    </span>
+  )
+}
+
 function ExtractedUseCaseCard({ useCase }: { useCase: ExtractedUseCase }) {
+  const isUpdate = useCase.extractionType === 'update'
   const formattedText = `Use Case: ${useCase.title}\nAccount: ${useCase.account}\nStage: ${useCase.stage}\nDescription: ${useCase.description}\nNext Steps:\n${useCase.nextSteps.map((s) => `- ${s}`).join('\n')}`
 
   return (
-    <div className="p-4 rounded-xl bg-theme-elevated border border-theme space-y-3">
+    <div className={`p-4 rounded-xl border space-y-3 ${
+      isUpdate
+        ? 'bg-neon-blue/5 border-neon-blue/20'
+        : 'bg-theme-elevated border-theme'
+    }`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Target className="w-4 h-4 text-primary shrink-0" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Target className={`w-4 h-4 shrink-0 ${isUpdate ? 'text-neon-blue' : 'text-primary'}`} />
           <h4 className="text-sm font-semibold text-theme-primary">{useCase.title}</h4>
+          {isUpdate && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-blue/10 text-neon-blue border border-neon-blue/20">
+              UPDATE
+            </span>
+          )}
+          <ConfidenceBadge score={useCase.confidenceScore} />
         </div>
         <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0">
           {useCase.stage}
         </span>
       </div>
 
+      {isUpdate && useCase.matchedUseCaseTitle && (
+        <p className="text-xs text-neon-blue/80">
+          Updates: <span className="font-medium">{useCase.matchedUseCaseTitle}</span>
+        </p>
+      )}
+
       <p className="text-xs text-theme-secondary leading-relaxed">{useCase.description}</p>
 
-      <div>
-        <p className="text-xs text-theme-muted font-medium mb-1.5">Next Steps:</p>
-        <ul className="space-y-1">
-          {useCase.nextSteps.map((step, i) => (
-            <li key={i} className="text-xs text-theme-secondary flex items-start gap-2">
-              <span className="text-primary mt-0.5">-</span>
-              {step}
-            </li>
-          ))}
-        </ul>
-      </div>
+      {isUpdate && useCase.extractedUpdates && useCase.extractedUpdates.length > 0 ? (
+        <div>
+          <p className="text-xs text-theme-muted font-medium mb-1.5">Extracted Updates:</p>
+          <ul className="space-y-1">
+            {useCase.extractedUpdates.map((update, i) => (
+              <li key={i} className="text-xs text-theme-secondary flex items-start gap-2">
+                <span className="text-neon-blue mt-0.5">+</span>
+                {update}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div>
+          <p className="text-xs text-theme-muted font-medium mb-1.5">Next Steps:</p>
+          <ul className="space-y-1">
+            {useCase.nextSteps.map((step, i) => (
+              <li key={i} className="text-xs text-theme-secondary flex items-start gap-2">
+                <span className="text-primary mt-0.5">-</span>
+                {step}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 pt-2 border-t border-theme">
         <CopyButton text={formattedText} label="Copy to Clipboard" />
@@ -117,6 +187,115 @@ function ExtractedUseCaseCard({ useCase }: { useCase: ExtractedUseCase }) {
           Export to Salesforce
         </button>
       </div>
+    </div>
+  )
+}
+
+function StructuredSummaryDisplay({ summary }: { summary: StructuredSummary }) {
+  return (
+    <div className="space-y-4">
+      {summary.executive_summary && (
+        <div>
+          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Executive Summary</h4>
+          <p className="text-sm text-theme-secondary leading-relaxed bg-theme-elevated p-3 rounded-lg border border-theme">
+            {summary.executive_summary}
+          </p>
+        </div>
+      )}
+
+      {summary.key_topics && summary.key_topics.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Key Topics</h4>
+          <div className="space-y-2">
+            {summary.key_topics.map((topic, i) => (
+              <div key={i} className="p-3 rounded-lg bg-theme-elevated border border-theme">
+                <h5 className="text-sm font-medium text-theme-primary">{topic.topic}</h5>
+                <p className="text-xs text-theme-secondary mt-1">{topic.details}</p>
+                {topic.outcome && (
+                  <p className="text-xs text-primary mt-1">
+                    <span className="text-theme-muted">Outcome:</span> {topic.outcome}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {summary.decisions && summary.decisions.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Decisions Made</h4>
+          <ul className="space-y-1">
+            {summary.decisions.map((decision, i) => (
+              <li key={i} className="text-xs text-theme-secondary flex items-start gap-2 p-2 bg-green-400/5 rounded-lg border border-green-400/20">
+                <Check className="w-3 h-3 text-green-400 mt-0.5 shrink-0" />
+                {decision}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {summary.action_items && summary.action_items.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Action Items</h4>
+          <div className="space-y-2">
+            {summary.action_items.map((item, i) => (
+              <div key={i} className="p-3 rounded-lg bg-theme-elevated border border-theme flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-xs text-theme-primary">{item.action}</p>
+                  {item.owner && (
+                    <p className="text-[10px] text-theme-muted mt-1">
+                      <Users className="w-3 h-3 inline mr-1" />
+                      {item.owner}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {item.priority && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      item.priority === 'high' ? 'bg-red-400/10 text-red-400' :
+                      item.priority === 'medium' ? 'bg-yellow-400/10 text-yellow-400' :
+                      'bg-theme-elevated text-theme-muted'
+                    }`}>
+                      {item.priority}
+                    </span>
+                  )}
+                  {item.due_date && (
+                    <span className="text-[10px] text-theme-muted">
+                      <Calendar className="w-3 h-3 inline mr-1" />
+                      {item.due_date}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {summary.risks_and_concerns && summary.risks_and_concerns.length > 0 && (
+        <div>
+          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Risks & Concerns</h4>
+          <div className="space-y-2">
+            {summary.risks_and_concerns.map((risk, i) => (
+              <div key={i} className="p-3 rounded-lg bg-red-400/5 border border-red-400/20">
+                <p className="text-xs text-red-400 font-medium">{risk.risk}</p>
+                {risk.impact && (
+                  <p className="text-[10px] text-theme-secondary mt-1">
+                    <span className="text-theme-muted">Impact:</span> {risk.impact}
+                  </p>
+                )}
+                {risk.mitigation && (
+                  <p className="text-[10px] text-green-400 mt-1">
+                    <span className="text-theme-muted">Mitigation:</span> {risk.mitigation}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -263,11 +442,15 @@ export function MeetingNotesPage() {
           const transformed: MeetingNote[] = data.map((n: Record<string, unknown>, i: number) => ({
             id: n.id as string,
             filename: n.filename as string,
+            title: n.title as string | undefined,
             uploadDate: n.uploadDate as string,
             account: n.account as string,
             attendees: (n.attendees as string[]) || [],
             summary: n.summary as string,
             isExpanded: i === 0,
+            rawContent: n.rawContent as string | undefined,
+            isProcessed: n.isProcessed as boolean | undefined,
+            structuredSummary: n.structuredSummary as StructuredSummary | undefined,
             extractedUseCases: ((n.extractedUseCases as Array<Record<string, unknown>>) || []).map(
               (euc) => ({
                 title: euc.title as string,
@@ -276,6 +459,10 @@ export function MeetingNotesPage() {
                 description: euc.description as string,
                 nextSteps: (euc.nextSteps as string[]) || [],
                 copied: false,
+                extractionType: euc.extractionType as 'new' | 'update' | undefined,
+                extractedUpdates: euc.extractedUpdates as string[] | undefined,
+                matchedUseCaseTitle: euc.matchedUseCaseTitle as string | undefined,
+                confidenceScore: euc.confidenceScore as number | undefined,
               })
             ),
           }))
@@ -613,11 +800,15 @@ export function MeetingNotesPage() {
                       className="border-t border-theme"
                     >
                       <div className="p-5 space-y-4">
-                        {/* Summary */}
-                        <div>
-                          <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Summary</h4>
-                          <p className="text-sm text-theme-secondary leading-relaxed">{note.summary}</p>
-                        </div>
+                        {/* Structured Summary or Basic Summary */}
+                        {note.structuredSummary ? (
+                          <StructuredSummaryDisplay summary={note.structuredSummary} />
+                        ) : (
+                          <div>
+                            <h4 className="text-xs font-medium text-theme-muted uppercase tracking-wider mb-2">Summary</h4>
+                            <p className="text-sm text-theme-secondary leading-relaxed">{note.summary}</p>
+                          </div>
+                        )}
 
                         {/* Attendees */}
                         {note.attendees.length > 0 && (
